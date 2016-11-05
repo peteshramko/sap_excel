@@ -1,0 +1,195 @@
+function bapi_bus2002_actelem_change_m.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_NUMBER) LIKE  BAPI_NETWORK_LIST-NETWORK
+*"  TABLES
+*"      IT_ACT_ELEMENT STRUCTURE  BAPI_BUS2002_ACTELEM_CHG
+*"      IT_UPDATE_ACT_ELEMENT STRUCTURE  BAPI_BUS2002_ACTELEM_UPD
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  data: lv_key                type char24,
+        lv_subrc              like sy-subrc,
+        lv_error              type c,
+        lv_dialog_status_tmp  type flag,
+        lv_msghand_num        like sy-uzeit,
+        lv_msgnum             like sy-uzeit,
+
+        ls_object             type psguid_ts_guid_for_extern,
+
+        lt_act_element        type table of bapi_bus2002_actelem_chg,
+        lt_update_act_element type table of bapi_bus2002_actelem_upd.
+
+  field-symbols: <ael>        type bapi_bus2002_actelem_chg.
+
+  lt_act_element[]        = it_act_element[].
+  lt_update_act_element[] = it_update_act_element[].
+
+* Convert activity element numbers in CHG and UPD-tables to enable an
+* early mapping within PS_BAPI_PREPARE
+  call function 'CN2002_ACT_CONV_KEY_OF_ACT_AEL'
+       tables
+            it_chg_act_element = lt_act_element
+            it_upd_act_element = lt_update_act_element.
+
+* Init BAPI
+* Exception 'message_handler_error' is NOT caught by design to force a
+* dump as we deal with a program error in this case
+  call function 'PS_BAPI_INITIALIZE'
+       importing
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       tables
+            return          = et_return.
+* Prepare BAPI
+  call function 'PS_BAPI_PREPARE'
+       exporting
+            i_number                 = i_number
+            i_method                 = con_ael_change
+       importing
+            e_number                 = i_number
+       tables
+            it_act_element_change    = lt_act_element
+            it_update_act_element    = lt_update_act_element
+            extensionin              = extensionin
+            extensionout             = extensionout
+       exceptions
+            precommit_already_called = 1
+            init_missing             = 2
+            network_read_error       = 3
+            one_project_violation    = 4
+            badi_error               = 5.
+  lv_subrc = sy-subrc.
+  if not lv_subrc is initial.
+*   In case of prepare error, keep its messages for ALL objects of
+*   the loop. This is achieved by not resetting the log processing the
+*   first file, i.e. by using SPACE as message handler number
+    clear lv_msgnum.
+*   Prepare failed: convert network number
+    call function 'EXT_NETWORK_GET_INT_NETWORK'
+         exporting
+              i_ext_network = i_number
+         importing
+              e_int_network = i_number
+         exceptions
+              error_occured = 0.
+  else.
+*   Prepare did not fail
+    lv_msgnum = lv_msghand_num.
+  endif.
+
+  loop at lt_act_element assigning <ael>.
+    write i_number to lv_key.
+    concatenate lv_key <ael>-element into lv_key
+                separated by space.
+    if lv_subrc is initial.
+      call function 'CN2002_ACTELEMENT_CHANGE'
+           exporting
+                i_number               = i_number
+                i_actelement           = <ael>
+           tables
+                it_actelement_upd      = lt_update_act_element
+                extensionin            = extensionin
+           exceptions
+                actelement_not_changed = 1.
+    endif.
+    if not sy-subrc is initial or
+       not lv_subrc is initial.
+*     Error in prepare or whilst change
+      lv_error = con_yes.
+      message e018(cnif_pi) with text-ael lv_key
+                            into null.
+      call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+           exporting
+                i_error = con_yes.
+*     Delete current activity element in error case to force late BAdI
+*     only for success cases
+*     Treat update table first as delete from change table unassigns
+*     field key <ael>
+      read table lt_update_act_element
+           with key element = <ael>-element
+           transporting no fields.
+      if sy-subrc is initial.
+        delete lt_update_act_element index sy-tabix.
+      endif.
+      delete lt_act_element.
+    else.
+*     Change successful
+      clear lv_error.
+      message s010(cnif_pi) with text-ael lv_key
+                            into null.
+      call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+           exporting
+                i_network_data = con_yes.
+*     Register object in success buffer table
+      clear ls_object.
+      ls_object-object_type = con_objtype_element.
+      ls_object-network     = i_number.
+      ls_object-element     = <ael>-element.
+      ls_object-vbkz        = con_ael_change.
+      call function 'PS_BAPI_SUCCESS_BT_APPEND'
+           exporting
+                i_object         = ls_object
+           exceptions
+                wrong_parameters = 0.
+    endif.
+
+*   Get last message of current activity element ('S' vs. 'E') as first
+*   one in the log (only 'message ... into null' NOT followed by
+*   'perform put_sy_message(saplco2o)')
+    call function 'PS_BAPI_MESSAGE_APPEND'
+         tables
+              return = et_return.
+
+*   Get remaining messages of current activity element (stored by
+*   'message ... into null' AND 'perform put_sy_message(saplco2o)')
+    call function 'PS_BAPI_APPL_MESSAGE_APP_EXT'
+         exporting
+              i_objectkey   = lv_key
+              i_msghand_num = lv_msgnum
+              i_error_case  = lv_error
+         tables
+              et_return     = et_return.
+
+  endloop.
+
+* In case of prepare error, LV_MSGNUM is SPACE and its messages are
+* still in the log. Delete them now (after the LOOP) to avoid them to
+* re-appear in the possibly written late BAdI-Log
+  if     lv_msgnum      is initial and
+     not lv_msghand_num is initial.
+    call function 'METHOD_LOG_INIT'
+         exporting
+              msghand_num = lv_msghand_num.
+  endif.
+
+* Within PS_BAPI_POST, skip late BAdI completely (controlled by
+* I_SUBRC) if
+* - prepare failed (LV_SUBRC is already not initial)
+* - prepare did not fail but nevertheless no success file exists
+*   (LT_ACT_ELEMENT is empty and LV_SUBRC is hence set)
+* Otherwise, only for success files (contents of LT_ACT_ELEMENT)
+  if lv_subrc         is initial and
+     lt_act_element[] is initial.
+    lv_subrc = 4.
+  endif.
+
+* Finish BAPI
+  call function 'PS_BAPI_FINISH'
+       exporting
+            i_dialog_status       = lv_dialog_status_tmp
+            i_msghand_num         = lv_msghand_num
+            i_number              = i_number
+            i_method              = con_ael_change
+            i_subrc               = lv_subrc
+       tables
+            it_act_element_change = lt_act_element
+            it_update_act_element = lt_update_act_element
+            return                = et_return
+            extensionin           = extensionin
+            extensionout          = extensionout.
+
+endfunction.

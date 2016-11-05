@@ -1,0 +1,46 @@
+FUNCTION bapi_act_input_check_and_post.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(HEADER_INFO) LIKE  BAPIPLNHDR
+*"                             STRUCTURE  BAPIPLNHDR
+*"             VALUE(TESTRUN) TYPE  TESTRUN DEFAULT 'X'
+*"             VALUE(DELTA) LIKE  COPLNCTRL-DELTA DEFAULT SPACE
+*"       TABLES
+*"              IDX_STRUCTURE STRUCTURE  BAPIACISTRU
+*"              OBJECT STRUCTURE  BAPIACIOBJ
+*"              PER_VALUE STRUCTURE  BAPIACIVAL
+*"              TOT_VALUE STRUCTURE  BAPIACITOT
+*"              RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+
+  DATA: ld_plnhdr LIKE plnhdr,
+        ld_identification LIKE sy-uzeit,
+        return_lines LIKE sy-tfill.
+
+* dummy value for plan_currtype (not used in activity input)
+  header_info-plan_currtype = 'C'.
+
+* Wait for debugging?
+  CALL FUNCTION 'K_PLAN_WAIT_FOR_DEBUGGING'.
+
+  PERFORM init_before_basis_check.
+
+  PERFORM check_input_aci TABLES idx_structure
+                             object
+                             per_value
+                             tot_value
+                             return
+                      USING  header_info
+                             ld_plnhdr.
+
+  DESCRIBE TABLE return LINES return_lines.
+  IF return_lines = 0.
+* No fundamental errors found in input tables - send to KIPL
+    PERFORM call_interface_aci TABLES return USING ld_plnhdr testrun
+                                                   delta.
+  ENDIF.
+
+  PERFORM refill_messages_from_caller. "Note 316341
+
+ENDFUNCTION.

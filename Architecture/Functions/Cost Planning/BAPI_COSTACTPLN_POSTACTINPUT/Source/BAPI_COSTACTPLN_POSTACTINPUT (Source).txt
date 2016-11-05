@@ -1,0 +1,27 @@
+FUNCTION bapi_costactpln_postactinput.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(HEADERINFO) LIKE  BAPIPLNHDR STRUCTURE  BAPIPLNHDR
+*"     VALUE(DELTA) LIKE  BAPI6031_CTRLDATA-DELTA DEFAULT SPACE
+*"  TABLES
+*"      INDEXSTRUCTURE STRUCTURE  BAPIACISTRU
+*"      COOBJECT STRUCTURE  BAPIACIOBJ
+*"      PERVALUE STRUCTURE  BAPIACIVAL OPTIONAL
+*"      TOTVALUE STRUCTURE  BAPIACITOT OPTIONAL
+*"      RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+
+  CALL FUNCTION 'BAPI_ACT_INPUT_CHECK_AND_POST'
+       EXPORTING
+            header_info   = headerinfo
+            testrun       = ' '
+            delta         = delta
+       TABLES
+            idx_structure = indexstructure
+            object        = coobject
+            per_value     = pervalue
+            tot_value     = totvalue
+            return        = return.
+
+ENDFUNCTION.

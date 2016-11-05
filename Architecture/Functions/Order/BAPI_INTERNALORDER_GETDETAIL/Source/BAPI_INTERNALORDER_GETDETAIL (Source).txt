@@ -1,0 +1,293 @@
+FUNCTION bapi_internalorder_getdetail.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(ORDERID) LIKE  BAPI2075_2-ORDER
+*"     VALUE(LANGUAGE) LIKE  BAPI0003_3-LANGU OPTIONAL
+*"  EXPORTING
+*"     VALUE(MASTER_DATA) LIKE  BAPI2075_2 STRUCTURE  BAPI2075_2
+*"     VALUE(RETURN) LIKE  BAPIRETURN STRUCTURE  BAPIRETURN
+*"  TABLES
+*"      SYSTEM_STATUS STRUCTURE  BAPI2075_3 OPTIONAL
+*"      USER_STATUS STRUCTURE  BAPI2075_4 OPTIONAL
+*"      ALLOWED_BUS_TRACT STRUCTURE  BAPI2075_5 OPTIONAL
+*"----------------------------------------------------------------------
+
+  TABLES: aufkv,
+*         JSTAT,                                             "P30K125184
+          tko04,
+*         TJ30,                                              "P30K125184
+          tj05.
+
+  DATA: it_jstat LIKE jstat OCCURS 0 WITH HEADER LINE.
+
+  DATA: i_stsma LIKE user_status-stat_prof,
+        e_vrgng LIKE tkavg-activity,
+        l_stonr LIKE user_status-us_st_numb,                "P30K125184
+        i_obtyp LIKE jsto-obtyp,
+        object_type_of_order LIKE tojtb-name,
+        x_sy LIKE sy,                                       "P30K125184
+        auth_aufk LIKE aufk.
+  DATA: ld_mesg_active(1) TYPE c.                           "note353492
+
+  PERFORM messages_pause CHANGING ld_mesg_active.           "note353492
+
+* 'OrderId' statt 'Order' verwenden                          "R30K001092
+  DATA: order LIKE aufk-aufnr.         "nachgezogen mit
+  order = orderid.                                          "P30K136570
+
+* Default Sprache setzen
+  IF ( language IS INITIAL ).
+    language = sy-langu.
+  ENDIF.
+
+* ----------------------------------------------------------------------
+*       Stammdaten des Auftrags einlesen
+* ----------------------------------------------------------------------
+  CLEAR aufkv.                                              "P30K125184
+  CALL FUNCTION 'K_ORDER_READ'
+    EXPORTING
+      aufnr            = order                              "P30K125184
+      no_message_store = 'X'
+    IMPORTING
+      i_aufkv          = aufkv
+    EXCEPTIONS
+      error_message    = 2
+      OTHERS           = 1.
+  IF sy-subrc <> 0.
+    PERFORM pass_on_messages USING return sy.               "P30K125184
+    PERFORM messages_continue USING ld_mesg_active.         "note353492
+    EXIT.                                                   "P30K125184
+  ENDIF.
+
+* Berechtigungsprüfung
+  MOVE-CORRESPONDING aufkv TO auth_aufk.
+  CALL FUNCTION 'K_ORDER_AUTHORITY_CHECK'
+    EXPORTING
+      i_aufk              = auth_aufk
+      i_actvt             = '03'
+    IMPORTING
+      e_error_occurred    = auth_error
+    EXCEPTIONS
+      user_not_authorized = 4.
+  IF ( sy-subrc <> 0 OR auth_error = 'X' ).
+    PERFORM pass_on_messages USING return sy.               "P30K125184
+    PERFORM messages_continue USING ld_mesg_active.         "note353492
+    EXIT.                                                   "P30K125184
+  ENDIF.
+
+* nur Aufträge mit geeignetem BUSINESS OBJECT TYPE
+  CALL FUNCTION 'K_ORDER_OBJECT_TYPE_GET'
+    EXPORTING
+      i_aufkv = aufkv
+    IMPORTING
+      e_type  = object_type_of_order.
+  IF ( object_type_of_order <> 'BUS2075' ).        "parametrisieren??
+    CLEAR x_sy.                                             "P30K125184
+    x_sy-msgid = 'KO'.                                      "P30K125184
+    x_sy-msgno = '030'.     " Auftrag & hat nicht den Objekt Typ BUS2075
+    x_sy-msgty = 'E'.                                       "P30K125184
+    x_sy-msgv1 = aufkv-aufnr.                               "note353492
+    PERFORM pass_on_messages USING return x_sy.             "P30K125184
+    PERFORM messages_continue USING ld_mesg_active.         "note353492
+    EXIT.
+  ENDIF.
+
+* Zuweisungen SAP-Feldnamen -> BAPI-Feldnamen
+  master_data-order          =  aufkv-aufnr.
+  master_data-order_type     =  aufkv-auart.
+  master_data-order_name     =  aufkv-ktext.
+  master_data-ext_ord_no     =  aufkv-aufex.
+  master_data-object_no      =  aufkv-objnr.
+  master_data-co_area        =  aufkv-kokrs.
+  master_data-comp_code      =  aufkv-bukrs.
+  master_data-bus_area       =  aufkv-gsber.
+  master_data-plant          =  aufkv-werks.
+  master_data-profit_ctr     =  aufkv-prctr.
+  master_data-respcctr       =  aufkv-kostv.
+* in charge user / verantwortlicher Benutzer                        "6.0
+  master_data-in_charge_user = aufkv-veraa_user.
+  master_data-wbs_elem       =  aufkv-pspel.
+* Zuweisungen SAP-Feldnamen -> BAPI-Feldnamen  (ab 4.0C)
+  master_data-request_cctr          =  aufkv-akstl.
+  master_data-requ_comp_code        =  aufkv-abukr.
+  master_data-sales_ord             =  aufkv-kdauf.
+  master_data-s_ord_item            =  aufkv-kdpos.
+  master_data-taxjurcode            =  aufkv-txjcd.
+  master_data-cctr_posted           =  aufkv-cycle.
+  master_data-currency              =  aufkv-waers.
+  master_data-cstg_sheet            =  aufkv-kalsm.
+  master_data-overhead_key          =  aufkv-zschl.
+  master_data-res_anal_key          =  aufkv-abgsl.
+  master_data-interest_prof         =  aufkv-zschm.
+  master_data-applicant             =  aufkv-user0.
+  master_data-applicant_phone       =  aufkv-user1.
+  master_data-person_resp           =  aufkv-user2.
+  master_data-person_resp_phone     =  aufkv-user3.
+  master_data-estimated_costs       =  aufkv-user4.
+  master_data-application_date      =  aufkv-user5.
+  master_data-department            =  aufkv-user6.
+  master_data-date_work_begins      =  aufkv-user7.
+  master_data-date_work_ends        =  aufkv-user8.
+  master_data-work_permit           =  aufkv-user9.
+  master_data-processing_group      =  aufkv-abkrs.
+* MASTER_DATA-INVEST_PROFILE        =  AUFKV-IVPRO.
+* MASTER_DATA-SCALE                 =  AUFKV-SIZECL.
+* MASTER_DATA-INV_REASON            =  AUFKV-IZWEK.
+* MASTER_DATA-ENVIR_INVEST          =  AUFKV-UMWKZ.
+  master_data-pln_release           =  aufkv-pdat1.
+  master_data-pln_completion        =  aufkv-pdat2.
+  master_data-pln_close             =  aufkv-pdat3.
+  CALL FUNCTION 'CJPN_INTERN_TO_EXTERN_CONV'
+    EXPORTING
+      int_num = aufkv-pspel
+    IMPORTING
+      ext_num = master_data-wbs_element_ext.
+
+* CURR-Feld auf BAPI-Format umrechnen
+*  call function 'BAPI_CURRENCY_CONV_TO_EXTERNAL'
+*       exporting
+*            currency        = aufkv-waers
+*            amount_internal = aufkv-user4
+*       importing
+*            amount_external = MASTER_DATA-user4
+*       exceptions
+*            error_message   = 2.
+*            others          = 1
+*  if sy-subrc <> 0.
+*    perform pass_on_messages.
+*  endif.
+
+** enhancements at 4.7
+  master_data-request_order  = aufkv-anfaufnr.
+
+  CALL FUNCTION 'FUNC_AREA_CONVERSION_OUTBOUND'
+    EXPORTING
+      i_func_area_long = aufkv-func_area
+    IMPORTING
+      e_func_area      = master_data-func_area
+      e_func_area_long = master_data-func_area_long.
+
+* ----------------------------------------------------------------------
+*    Statusinfo einlesen
+* ----------------------------------------------------------------------
+  CALL FUNCTION 'STATUS_READ'
+    EXPORTING
+      objnr         = aufkv-objnr
+      only_active   = 'X'
+    IMPORTING
+      obtyp         = i_obtyp
+      stsma         = i_stsma
+      stonr         = l_stonr                               "P30K125184
+    TABLES
+      status        = it_jstat
+    EXCEPTIONS
+      error_message = 2
+      OTHERS        = 1.
+  IF sy-subrc <> 0.
+    PERFORM pass_on_messages USING return sy.               "P30K125184
+    PERFORM messages_continue USING ld_mesg_active.         "note353492
+    EXIT.                                                   "P30K125184
+  ENDIF.
+
+  LOOP AT it_jstat.
+*   Tabelle SYSTEM_STATUS füllen
+    IF ( it_jstat-stat(1) = 'I' ).
+      system_status-sys_status = it_jstat-stat.
+      CALL FUNCTION 'STATUS_NUMBER_CONVERSION'
+        EXPORTING
+          language      = language
+          objnr         = aufkv-objnr
+          status_number = it_jstat-stat
+        IMPORTING
+          txt04         = system_status-sy_st_text
+          txt30         = system_status-sy_st_dscr
+        EXCEPTIONS
+          error_message = 2
+          OTHERS        = 1.
+      IF sy-subrc <> 0.
+        PERFORM pass_on_messages USING return sy.           "P30K125184
+        PERFORM messages_continue USING ld_mesg_active.     "note353492
+        EXIT.                                               "P30K125184
+      ENDIF.
+      APPEND system_status.
+
+*   Tabelle USER_STATUS füllen
+    ELSEIF ( it_jstat-stat(1) = 'E' ).
+      user_status-stat_prof  = i_stsma.
+      user_status-usr_status = it_jstat-stat.
+      user_status-us_st_numb = l_stonr.                     "P30K125184
+      CALL FUNCTION 'STATUS_NUMBER_CONVERSION'
+        EXPORTING
+          language      = language
+          objnr         = aufkv-objnr
+          status_number = it_jstat-stat
+          stsma         = i_stsma
+        IMPORTING
+          txt04         = user_status-us_st_text
+          txt30         = user_status-us_st_dscr
+        EXCEPTIONS
+          error_message = 2
+          OTHERS        = 1.
+      IF sy-subrc <> 0.
+        PERFORM pass_on_messages USING return sy.           "P30K125184
+        PERFORM messages_continue USING ld_mesg_active.     "note353492
+        EXIT.                                               "P30K125184
+      ENDIF.
+      APPEND user_status.
+    ENDIF.
+  ENDLOOP.
+
+* alte Statusverwaltung (<=> Tabelle 'USER_STATUS' leer)
+  IF ( NOT aufkv-astnr IS INITIAL ).
+    user_status-us_st_numb = aufkv-astnr.
+    user_status-us_st_text = aufkv-astnr.
+    SELECT SINGLE * FROM  tko04
+           WHERE  spras    = language
+           AND    art      = master_data-order_type
+           AND    astnr    = aufkv-astnr.
+    IF sy-subrc = 0.
+      user_status-us_st_dscr = tko04-txt.
+      APPEND user_status.
+    ENDIF.
+  ENDIF.
+
+* Tabelle 'ALLOWED_BUS_TRACT' füllen
+  IF allowed_bus_tract IS SUPPLIED.
+    SELECT * FROM tj05 WHERE obtyp = i_obtyp.
+      e_vrgng = tj05-vrgng.
+      CALL FUNCTION 'K_ORDER_CHECK'
+        EXPORTING
+          aufnr         = order                             "P30K125184
+          e_aufkv       = aufkv
+          no_buffer     = 'X'
+          no_read       = 'X'
+          test_vrgng    = e_vrgng
+        EXCEPTIONS
+          error_message = 2
+          OTHERS        = 1.
+      IF sy-subrc = 0.
+*     nur erlaubte Vorgängen übernehmen
+        CLEAR allowed_bus_tract.
+        allowed_bus_tract-trans = tj05-vrgng.
+        CALL FUNCTION 'BSV_GET_TEXT_VRGNG'
+          EXPORTING
+            langu         = language
+            vrgng         = tj05-vrgng
+          IMPORTING
+            txt           = allowed_bus_tract-descript
+          EXCEPTIONS
+            error_message = 2
+            OTHERS        = 1.
+        IF sy-subrc <> 0.
+          PERFORM pass_on_messages USING return sy.         "P30K125184
+          PERFORM messages_continue USING ld_mesg_active.   "note353492
+          EXIT.                                             "P30K125184
+        ENDIF.
+        APPEND allowed_bus_tract.
+      ENDIF.
+    ENDSELECT.
+  ENDIF.
+  PERFORM messages_continue USING ld_mesg_active.           "note353492
+
+ENDFUNCTION.

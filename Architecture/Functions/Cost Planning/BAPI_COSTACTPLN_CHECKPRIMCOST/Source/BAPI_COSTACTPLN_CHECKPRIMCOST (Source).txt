@@ -1,0 +1,31 @@
+FUNCTION BAPI_COSTACTPLN_CHECKPRIMCOST.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(HEADERINFO) LIKE  BAPIPLNHDR
+*"                             STRUCTURE  BAPIPLNHDR
+*"             VALUE(DELTA) LIKE  BAPI6031_CTRLDATA-DELTA
+*"                             DEFAULT SPACE
+*"       TABLES
+*"              INDEXSTRUCTURE STRUCTURE  BAPIACPSTRU
+*"              COOBJECT STRUCTURE  BAPIPCPOBJ
+*"              PERVALUE STRUCTURE  BAPIPCPVAL OPTIONAL
+*"              TOTVALUE STRUCTURE  BAPIPCPTOT OPTIONAL
+*"              CONTRL STRUCTURE  BAPIPCPCTRL OPTIONAL
+*"              RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+
+  CALL FUNCTION 'BAPI_PRIM_COST_CHECK_AND_POST'
+       EXPORTING
+            HEADER_INFO   = HEADERINFO
+            TESTRUN       = 'X'
+            DELTA         = DELTA
+       TABLES
+            IDX_STRUCTURE = INDEXSTRUCTURE
+            OBJECT        = COOBJECT
+            PER_VALUE     = PERVALUE
+            TOT_VALUE     = TOTVALUE
+            CONTRL        = CONTRL
+            RETURN        = RETURN.
+
+ENDFUNCTION.

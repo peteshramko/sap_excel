@@ -1,0 +1,179 @@
+FUNCTION BAPI_PROJECTDEF_GETDETAIL.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(CURRENTEXTERNALPROJE)
+*"                             LIKE  BAPI_PROJ_KEY-PROJECT_DEFI
+*"             VALUE(CURRENTINTERNALPROJE)
+*"                             LIKE  BAPI_PROJ_KEY-PROJ_KEY_INT
+*"       EXPORTING
+*"             VALUE(PROJECT_DEFINITION_STRU)
+*"                             LIKE  BAPI_PROJECT_DEFINITION_EX
+*"                             STRUCTURE  BAPI_PROJECT_DEFINITION_EX
+*"             VALUE(RETURN) LIKE  BAPIRETURN1 STRUCTURE  BAPIRETURN1
+*"----------------------------------------------------------------------
+
+  DATA: PSPID          LIKE PROJ-PSPID,
+        E_PROJ         LIKE PROJ,
+        E_VSPROJ       LIKE VSPROJ_CN,
+        CONST_ST_LOEVM LIKE JEST-STAT VALUE 'I0076'.
+
+
+* Keine Projektdefinition angegeben -> Fehler
+  IF CURRENTEXTERNALPROJE IS INITIAL AND
+     CURRENTINTERNALPROJE IS INITIAL.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+         EXPORTING
+              TYPE       = 'E'
+              CL         = 'CJ'
+              NUMBER     = '003'
+         IMPORTING
+              BAPIRETURN = RETURN
+         EXCEPTIONS
+              OTHERS     = 1.
+    EXIT.
+  ENDIF.
+
+* Externer Schluessel
+  IF NOT CURRENTEXTERNALPROJE IS INITIAL.
+* Konvertierungsexit
+    CALL FUNCTION 'CONVERSION_EXIT_PROJN_INPUT'
+         EXPORTING
+              INPUT  = CURRENTEXTERNALPROJE
+         IMPORTING
+              OUTPUT = PSPID
+         EXCEPTIONS
+              error_message = 1
+              OTHERS        = 2.
+    if sy-subrc = 1.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+           EXPORTING
+                type       = sy-msgty
+                cl         = sy-msgid
+                number     = sy-msgno
+                PAR1       = sy-msgv1
+                PAR2       = sy-msgv2
+                PAR3       = sy-msgv3
+                PAR4       = sy-msgv4
+           IMPORTING
+               BAPIRETURN = RETURN
+           exceptions
+               OTHERS      = 0.
+    endif.
+
+* Prjektdefinition selektieren
+    CALL FUNCTION 'CJDW_PROJ_SELECT_SINGLE'
+         EXPORTING
+              PSPID             = PSPID
+         IMPORTING
+              E_PROJ            = E_PROJ
+         EXCEPTIONS
+              error_message     = 1
+              MISSING_PARAMETER = 2
+              NOT_FOUND         = 3
+              OTHERS            = 4.
+    if sy-subrc = 1.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+           EXPORTING
+                type       = sy-msgty
+                cl         = sy-msgid
+                number     = sy-msgno
+                PAR1       = sy-msgv1
+                PAR2       = sy-msgv2
+                PAR3       = sy-msgv3
+                PAR4       = sy-msgv4
+           IMPORTING
+               BAPIRETURN = RETURN
+           exceptions
+               OTHERS      = 0.
+    endif.
+* Externer und interener Schlüssel kompatibel
+    IF   NOT CURRENTINTERNALPROJE IS INITIAL AND
+             CURRENTINTERNALPROJE NE SPACE   AND
+       NOT E_PROJ-PSPNR EQ CURRENTINTERNALPROJE.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+           EXPORTING
+                TYPE       = 'E'
+                CL         = 'CJ'
+                NUMBER     = '820'
+           IMPORTING
+                BAPIRETURN = RETURN
+           EXCEPTIONS
+                OTHERS     = 1.
+      EXIT.
+    ENDIF.
+  ELSE.
+    CALL FUNCTION 'CJDW_PROJ_SELECT_SINGLE'
+         EXPORTING
+              PSPNR             = CURRENTINTERNALPROJE
+         IMPORTING
+              E_PROJ            = E_PROJ
+         EXCEPTIONS
+              MISSING_PARAMETER = 1
+              NOT_FOUND         = 2
+              OTHERS            = 3.
+
+  ENDIF.
+
+* Projektdefinition nicht gefunden -> Fehler
+  IF NOT SY-SUBRC IS INITIAL.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+         EXPORTING
+              TYPE       = 'E'
+              CL         = 'CJ'
+              NUMBER     = '011'
+         IMPORTING
+              BAPIRETURN = RETURN
+         EXCEPTIONS
+              OTHERS     = 1.
+  ENDIF.
+
+* Authority check
+  call function 'CNAU_AUTHORITY_PROJ'
+       exporting
+            actvt        = '03'
+            actvt_a      = '03'
+            i_proj       = E_PROJ
+            msgty        = 'E'
+       exceptions
+            error_message.
+  if sy-subrc <> 0.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+         EXPORTING
+              type       = sy-msgty
+              cl         = sy-msgid
+              number     = sy-msgno
+              PAR1       = sy-msgv1
+              PAR2       = sy-msgv2
+              PAR3       = sy-msgv3
+              PAR4       = sy-msgv4
+         IMPORTING
+             BAPIRETURN = RETURN
+         exceptions
+             OTHERS      = 0.
+    exit.
+  endif.
+
+* Projektdefinition auf BAPI-Struktur mappen
+  CALL FUNCTION 'MAP_PROJ_2_BAPI_PROJECTDEF_EX'
+       EXPORTING
+            I_PROJ                  = E_PROJ
+       CHANGING
+            BAPI_PROJECT_DEFINITION = PROJECT_DEFINITION_STRU
+       EXCEPTIONS
+            OTHERS                  = 1.
+
+  CALL FUNCTION 'STATUS_CHECK'
+       EXPORTING
+            OBJNR             = E_PROJ-OBJNR
+            STATUS            = CONST_ST_LOEVM
+       EXCEPTIONS
+            OBJECT_NOT_FOUND  = 1
+            STATUS_NOT_ACTIVE = 2
+            OTHERS            = 3.
+  IF SY-SUBRC IS INITIAL.
+    PROJECT_DEFINITION_STRU-DELETION_FLAG = 'X'.
+  ENDIF.
+
+
+ENDFUNCTION.

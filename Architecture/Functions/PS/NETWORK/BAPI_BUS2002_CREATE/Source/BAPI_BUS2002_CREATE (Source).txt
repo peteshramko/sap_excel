@@ -1,0 +1,137 @@
+FUNCTION bapi_bus2002_create.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_NETWORK) LIKE  BAPI_BUS2002_NEW STRUCTURE
+*"        BAPI_BUS2002_NEW
+*"  TABLES
+*"      ET_RETURN STRUCTURE  BAPIRET2
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: lv_key               type char24,
+        lv_dialog_status_tmp TYPE flag,
+        lv_msghand_num       LIKE sy-uzeit,
+        lv_subrc             like sy-subrc,
+        lv_error             type c,
+
+        ls_object            type PSGUID_TS_GUID_FOR_EXTERN.
+
+* Init BAPI
+* Exception 'message_handler_error' is NOT caught by design to force a
+* dump as we deal with a program error in this case
+  CALL FUNCTION 'PS_BAPI_INITIALIZE'
+       IMPORTING
+            e_dialog_status            = lv_dialog_status_tmp
+            e_msghand_num              = lv_msghand_num
+       TABLES
+            return                     = et_return.
+* Prepare BAPI
+  CALL FUNCTION 'PS_BAPI_PREPARE'
+       EXPORTING
+            i_number                 = i_network-network
+            i_network_create         = i_network
+            i_method                 = con_net_create
+       IMPORTING
+            e_number                 = i_network-network
+       TABLES
+            extensionin              = extensionin
+            extensionout             = extensionout
+       EXCEPTIONS
+            precommit_already_called = 1
+            init_missing             = 2
+            one_project_violation    = 3
+            badi_error               = 4.
+  lv_subrc = sy-subrc.
+
+  IF lv_subrc is initial.
+    CALL FUNCTION 'CN2002_NETWORK_CREATE'
+         EXPORTING
+              i_network           = i_network
+         IMPORTING
+              e_nplnr             = i_network-network
+         TABLES
+              extensionin         = extensionin
+         EXCEPTIONS
+              network_not_created = 1.
+    lv_subrc = sy-subrc.
+  else.
+*   Prepare failed: convert network number
+    CALL FUNCTION 'EXT_NETWORK_GET_INT_NETWORK'
+         EXPORTING
+              i_ext_network = i_network-network
+         IMPORTING
+              e_int_network = i_network-network
+         EXCEPTIONS
+              error_occured = 0.
+  ENDIF.
+
+  IF not lv_subrc is initial.
+*   Error in prepare or whilst creation
+    lv_error = con_yes.
+*   external numbering: dequeue number
+    if not i_network-network    is initial and
+       not i_network-network(1) eq con_%.
+      CALL FUNCTION 'DEQUEUE_ESORDER'
+           EXPORTING
+                AUFNR = i_network-network.
+    endif.
+    MESSAGE e007(cnif_pi) WITH text-net i_network-network
+                          INTO null.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+  ELSE.
+*   Create successful
+    clear lv_error.
+    MESSAGE s004(cnif_pi) WITH text-net i_network-network
+                          INTO null.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_network_data = con_yes.
+*   Register object in success buffer table
+    clear ls_object.
+    ls_object-object_type = con_objtype_network.
+    ls_object-network     = i_network-network.
+    ls_object-vbkz        = con_net_create.
+    CALL FUNCTION 'PS_BAPI_SUCCESS_BT_APPEND'
+         EXPORTING
+              I_OBJECT         = ls_object
+         EXCEPTIONS
+              WRONG_PARAMETERS = 0.
+  ENDIF.
+
+* Get last message of current activity ('S' vs. 'E') as first one in
+* the log (only 'message ... into null' NOT followed by 'perform
+* put_sy_message(saplco2o)')
+  CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+       TABLES
+            return = et_return.
+
+* Get remaining messages of current method (stored by 'message ...
+* into null' AND 'perform put_sy_message(saplco2o)')
+  write i_network-network to lv_key.
+  CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APP_EXT'
+       EXPORTING
+            i_objectkey   = lv_key
+            i_msghand_num = lv_msghand_num
+            i_error_case  = lv_error
+       TABLES
+            et_return     = et_return.
+
+* Finish BAPI - call late badi, reset dialog flags
+  CALL FUNCTION 'PS_BAPI_FINISH'
+       EXPORTING
+            i_network_create      = i_network
+            i_dialog_status       = lv_dialog_status_tmp
+            i_msghand_num         = lv_msghand_num
+            i_number              = i_network-network
+            i_method              = con_net_create
+            i_subrc               = lv_subrc
+       TABLES
+            return                = et_return
+            extensionin           = extensionin
+            extensionout          = extensionout.
+
+ENDFUNCTION.

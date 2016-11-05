@@ -1,0 +1,326 @@
+FUNCTION bapi_po_getitems.                                  "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(PURCHASEORDER) LIKE  BAPIEKKO-PO_NUMBER OPTIONAL
+*"     VALUE(DOC_TYPE) LIKE  BAPIEKKO-DOC_TYPE OPTIONAL
+*"     VALUE(DOC_DATE) LIKE  BAPIEKKO-DOC_DATE OPTIONAL
+*"     VALUE(PUR_GROUP) LIKE  BAPIEKKO-PUR_GROUP OPTIONAL
+*"     VALUE(PURCH_ORG) LIKE  BAPIEKKO-PURCH_ORG OPTIONAL
+*"     VALUE(VENDOR) LIKE  BAPIEKKO-VENDOR OPTIONAL
+*"     VALUE(SUPPL_PLANT) LIKE  BAPIEKKO-SUPPL_PLNT OPTIONAL
+*"     VALUE(MATERIAL) LIKE  BAPIEKPO-MATERIAL OPTIONAL
+*"     VALUE(MAT_GRP) LIKE  BAPIEKPO-MAT_GRP OPTIONAL
+*"     VALUE(ITEM_CAT) LIKE  BAPIEKPO-ITEM_CAT OPTIONAL
+*"     VALUE(ACCTASSCAT) LIKE  BAPIEKPO-ACCTASSCAT OPTIONAL
+*"     VALUE(PLANT) LIKE  BAPIEKPO-PLANT OPTIONAL
+*"     VALUE(TRACKINGNO) LIKE  BAPIEKPO-TRACKINGNO OPTIONAL
+*"     VALUE(SHORT_TEXT) LIKE  BAPIEKPO-SHORT_TEXT OPTIONAL
+*"     VALUE(CREATED_BY) LIKE  BAPIEKKOC-CREATED_BY OPTIONAL
+*"     VALUE(PREQ_NAME) LIKE  BAPIEKPOC-PREQ_NAME DEFAULT SPACE
+*"     VALUE(WITH_PO_HEADERS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(DELETED_ITEMS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(ITEMS_OPEN_FOR_RECEIPT) LIKE  BAPIMMPARA-SELECTION DEFAULT
+*"       SPACE
+*"     VALUE(PUR_MAT) LIKE  BAPIEKPO-PUR_MAT DEFAULT SPACE
+*"     VALUE(MATERIAL_EVG) TYPE  BAPIMGVMATNR OPTIONAL
+*"     VALUE(PUR_MAT_EVG) TYPE  BAPIMGVMATNR OPTIONAL
+*"  TABLES
+*"      PO_HEADERS STRUCTURE  BAPIEKKOL OPTIONAL
+*"      PO_ITEMS STRUCTURE  BAPIEKPOC
+*"      RETURN STRUCTURE  BAPIRETURN OPTIONAL
+*"----------------------------------------------------------------------
+ENHANCEMENT-POINT BAPI_PO_GETITEMS_G8 SPOTS ES_SAPLMEWP STATIC.
+*$*$-Start: BAPI_PO_GETITEMS_G8-----------------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_PO_GETITEMS.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETITEMS_G8-----------------------------------------------------------------$*$*
+
+ENHANCEMENT-POINT BAPI_PO_GETITEMS_G6 SPOTS ES_SAPLMEWP.
+*$*$-Start: BAPI_PO_GETITEMS_G6-----------------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_PO_GETITEMS.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050216
+CALL FUNCTION 'MATNR_BAPI_CONV_FROM_EXTERNAL'
+EXPORTING
+  MATNR_EXT  = MATERIAL_EVG-MATERIAL_EXT
+  MATNR_VERS = MATERIAL_EVG-MATERIAL_VERS
+  MATNR_GUID = MATERIAL_EVG-MATERIAL_GUID
+CHANGING
+  MATNR_INT  = MATERIAL
+  .
+CALL FUNCTION 'MATNR_BAPI_CONV_FROM_EXTERNAL'
+EXPORTING
+  MATNR_EXT  = PUR_MAT_EVG-MATERIAL_EXT
+  MATNR_VERS = PUR_MAT_EVG-MATERIAL_VERS
+  MATNR_GUID = PUR_MAT_EVG-MATERIAL_GUID
+CHANGING
+  MATNR_INT  = PUR_MAT
+  .
+T_MGV_FNAMES1-INT = 'PUR_MAT'.
+T_MGV_FNAMES1-EXT = 'PUR_MAT_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'PUR_MAT_VERSION'.
+T_MGV_FNAMES1-GUID = 'PUR_MAT_GUID'.
+APPEND T_MGV_FNAMES1.
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETITEMS_G6-----------------------------------------------------------------$*$*
+
+* generate data record
+  fbgenmac 'BAPI_PO_GETITEMS'.                       "#EC NEEDED "#EC *
+
+* clear internal tables and structures
+  CLEAR: po_headers, po_items, sekpo, sekko, stab1, stab2, kekko.
+  REFRESH: po_headers, po_items, sekpo, sekko, stab1, stab2, kekko.
+  REFRESH: r_ebeln, r_bsart, r_bedat, r_ekgrp, r_ekorg, r_lifnr,
+          r_reswk, r_ematn, r_matnr, r_matkl, r_pstyp, r_knttp, r_werks, r_bednr,
+          r_afnam.
+
+* fill ranges for the select
+  PERFORM fill_ranges TABLES r_ebeln r_bsart r_bedat r_ekgrp r_ekorg
+                             r_lifnr r_reswk r_ematn r_matnr r_matkl r_pstyp
+                             r_knttp r_werks r_bednr r_afnam
+                             stab1 stab2 return
+                      USING  purchaseorder doc_type doc_date
+                             pur_group purch_org vendor suppl_plant
+                             material pur_mat mat_grp item_cat acctasscat
+                             plant trackingno preq_name short_text
+                             read_header
+                             read_item created_by.
+
+  CHECK exitflag EQ space.
+
+* read po headers
+  IF read_header NE space.
+    SELECT * FROM ekko APPENDING TABLE sekko
+                       WHERE ebeln IN r_ebeln
+                       AND   bstyp EQ 'F'
+                       AND   ekgrp IN r_ekgrp
+                       AND   ekorg IN r_ekorg
+                       AND   bsart IN r_bsart
+                       AND   bedat IN r_bedat
+                       AND   lifnr IN r_lifnr
+                       AND   reswk IN r_reswk
+                       AND   (stab2).
+
+*Check if sekko is empty and leave, if necessary
+    IF sy-subrc NE 0.
+      PERFORM fill_bapireturn TABLES return
+                           USING  'E'
+                                  'W5'
+                                  '037'
+                                  space
+                                  space
+                                  space
+                                  space.
+      EXIT.
+    ENDIF.
+    SORT sekko BY ebeln.
+* PO_HEADERS has to be transported
+    IF with_po_headers NE space.
+      LOOP AT sekko.
+        PERFORM po_authority_header TABLES return
+                                    USING  sekko.
+        IF no_authority EQ space.
+          PERFORM sekko_to_po_headers TABLES po_headers
+                                             return
+                                      USING  sekko.
+        ELSE.
+          DELETE sekko.
+        ENDIF.
+      ENDLOOP.
+
+* PO_HEADERS should not be filled
+    ELSE.
+      LOOP AT sekko.
+        PERFORM po_authority_header TABLES return
+                                    USING  sekko.
+        IF no_authority NE space.
+          DELETE sekko.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDIF.
+
+* read po items
+  READ TABLE sekko INDEX 1.
+  IF sy-subrc EQ 0.
+    SELECT * FROM ekpo APPENDING TABLE sekpo
+                       FOR ALL ENTRIES IN sekko
+                       WHERE ebeln EQ sekko-ebeln
+                       AND   ematn IN r_ematn
+                       AND   matnr IN r_matnr
+                       AND   matkl IN r_matkl
+                       AND   pstyp IN r_pstyp
+                       AND   knttp IN r_knttp
+                       AND   werks IN r_werks
+                       AND   bednr IN r_bednr
+                       AND   afnam IN r_afnam
+                       AND   (stab1).
+
+* fill internal item data into external format
+    LOOP AT sekpo.
+      PERFORM po_authority_item TABLES return
+                                USING  sekpo.
+      CHECK no_authority EQ space.
+      IF deleted_items EQ space.
+        CHECK sekpo-loekz IS INITIAL.
+      ENDIF.
+      IF items_open_for_receipt NE space.
+        CHECK sekpo-loekz IS INITIAL.
+        CHECK sekpo-elikz EQ space.
+        CHECK sekpo-wepos NE space.
+        CHECK sekpo-pstyp NE '9'.
+        ekkokey-mandt = sy-mandt.
+        ekkokey-ebeln = sekpo-ebeln.
+        READ TABLE sekko WITH KEY ebeln = sekpo-ebeln BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          CHECK sekko-frgrl EQ space.
+        ENDIF.
+        PERFORM check_history USING sekpo.
+      ENDIF.
+      CHECK not_open_for_receipt EQ space.
+      CLEAR: po_items.                                      "n_1078712
+      PERFORM sekpo_to_po_items TABLES po_items
+                                       po_headers
+                                       return
+                                USING  sekpo.
+    ENDLOOP.
+
+* read po items without header data
+  ELSE.
+    IF read_item EQ space.
+      PERFORM fill_bapireturn TABLES return
+                              USING  'E'
+                                     'W5'
+                                     '037'
+                                     space
+                                     space
+                                     space
+                                     space.
+      IF 1 = 2. MESSAGE e037(w5). ENDIF.
+      EXIT.
+    ENDIF.
+    SELECT * FROM ekpo APPENDING TABLE sekpo
+                       WHERE bstyp EQ 'F'
+                       AND   ematn IN r_ematn
+                       AND   matnr IN r_matnr
+                       AND   matkl IN r_matkl
+                       AND   pstyp IN r_pstyp
+                       AND   knttp IN r_knttp
+                       AND   werks IN r_werks
+                       AND   bednr IN r_bednr
+                       AND   afnam IN r_afnam
+                       AND   (stab1).
+
+* fill internal item data into external format
+    CLEAR ekkokey.
+    LOOP AT sekpo.
+      PERFORM po_authority_item TABLES return
+                                USING  sekpo.
+      CHECK no_authority EQ space.
+      IF deleted_items EQ space.
+        CHECK sekpo-loekz IS INITIAL.
+      ENDIF.
+      IF items_open_for_receipt NE space.
+        CHECK sekpo-loekz IS INITIAL.
+        CHECK sekpo-elikz EQ space.
+        CHECK sekpo-wepos NE space.
+        CHECK sekpo-pstyp NE '9'.
+        CLEAR h_frgrl.
+        IF sekpo-ebeln NE ekkokey-ebeln.
+          SELECT SINGLE frgrl FROM ekko INTO h_frgrl
+                                        WHERE ebeln EQ sekpo-ebeln.
+          CHECK h_frgrl EQ space.
+        ENDIF.
+        ekkokey-ebeln = sekpo-ebeln.
+        PERFORM check_history USING sekpo.
+      ENDIF.
+      CHECK not_open_for_receipt EQ space.
+      CLEAR: po_items.                                      "n_1078712
+      PERFORM sekpo_to_po_items TABLES po_items
+                                       po_headers
+                                       return
+                                USING  sekpo.
+    ENDLOOP.
+  ENDIF.
+  SORT po_items BY po_number po_item.
+
+  IF read_header EQ space AND
+     with_po_headers NE space AND
+     sekko[] IS INITIAL AND
+     NOT kekko[] IS INITIAL.
+* read po headers after the items
+    SELECT * FROM ekko APPENDING TABLE sekko
+                       FOR ALL ENTRIES IN kekko
+                       WHERE ebeln EQ kekko-ebeln.
+    LOOP AT sekko.
+      PERFORM po_authority_header TABLES return
+                                  USING  sekko.
+      IF no_authority EQ space.
+        PERFORM sekko_to_po_headers TABLES po_headers
+                                           return
+                                    USING  sekko.
+      ELSE.
+        LOOP AT po_items WHERE po_number EQ sekko-ebeln.
+          DELETE po_items.
+        ENDLOOP.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+  SORT po_headers BY po_number.
+
+* correct the po_headers-table
+  IF read_header NE space AND
+     with_po_headers NE space.
+    LOOP AT po_headers.
+      READ TABLE po_items WITH KEY po_number = po_headers-po_number BINARY SEARCH.
+      IF sy-subrc NE 0.
+        DELETE po_headers.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+* nothing found
+  IF po_headers[] IS INITIAL AND
+     po_items[] IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '037'
+                                   space
+                                   space
+                                   space
+                                   space.
+    IF 1 = 2. MESSAGE e037(w5). ENDIF.
+  ENDIF.
+
+ENHANCEMENT-POINT BAPI_PO_GETITEMS_G7 SPOTS ES_SAPLMEWP.
+*$*$-Start: BAPI_PO_GETITEMS_G7-----------------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_PO_GETITEMS.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETITEMS_G7-----------------------------------------------------------------$*$*
+
+ENDFUNCTION.

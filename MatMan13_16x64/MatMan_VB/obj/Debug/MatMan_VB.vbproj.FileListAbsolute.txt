@@ -1,0 +1,17 @@
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.vbprojResolveAssemblyReference.cache
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.vbproj.ResolveComReference.cache
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.Resources.resources
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.vbproj.GenerateResource.Cache
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\MatMan_VB.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\MatMan_VB.pdb
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\MatMan_VB.xml
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\MatMan_VB.tlb
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\iiiwave.MatManLib.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\sapnco.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\sapnco_utils.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\iiiwave.MatManLib.pdb
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\en-US\iiiwave.MatManLib.resources.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\bin\Debug\fr-FR\iiiwave.MatManLib.resources.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.dll
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.xml
+D:\iiiwave\Dev\MatMan13_16x64\MatMan_VB\obj\Debug\MatMan_VB.pdb

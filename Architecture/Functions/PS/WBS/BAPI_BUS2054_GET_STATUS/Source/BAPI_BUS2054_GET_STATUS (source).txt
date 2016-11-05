@@ -1,0 +1,167 @@
+FUNCTION BAPI_BUS2054_GET_STATUS .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  EXPORTING
+*"     VALUE(RETURN) TYPE  BAPIRETURN1
+*"  TABLES
+*"      I_WBS_ELEMENTS STRUCTURE  BAPI_WBS_ELEMENTS
+*"      E_SYSTEM_STATUS STRUCTURE  BAPI_WBS_SYSTEM_STATUS OPTIONAL
+*"      E_USER_STATUS STRUCTURE  BAPI_WBS_USER_STATUS OPTIONAL
+*"      E_RESULT STRUCTURE  BAPI_STATUS_RESULT OPTIONAL
+*"----------------------------------------------------------------------
+
+  data: l_prps        type prps.
+  data: l_wbs_element like bapi_wbs_elements-wbs_element.
+  data: lt_jest       like jstat occurs 0 with header line.
+  data: l_stsma       like jsto-stsma.
+  data: l_status      like TJ02T-TXT04.
+  DATA: method_log    LIKE method_log OCCURS 0 WITH HEADER LINE.
+  DATA: msg_log       LIKE msg_log OCCURS 0 WITH HEADER LINE.
+  DATA: e_msg_text    LIKE  msg_text OCCURS 0 WITH HEADER LINE.
+  data: LOG_LEVEL     LIKE METHOD_LOG-LOGLEVEL.
+  data: SUCC_CODE     LIKE METHOD_LOG-SUCC_CODE.
+  DATA: l_check_ok    TYPE boole_d.
+
+  data: l_objectkey   type BAPI_STATUS_RESULT-objectkey.
+  data: lt_wbs_elements_orig like BAPI_WBS_ELEMENTs
+               occurs 0 with header line.
+
+  data: lv_dialog_status type flag.                        "v_n_898737
+
+* Get the dialog status
+  call function 'DIALOG_GET_STATUS'
+    importing
+      dialog_status = lv_dialog_status.                    "^_n_898737
+
+* save structures
+  lt_wbs_elements_orig[] = i_wbs_elements[].
+
+* initialization
+  perform cnif_init using    yx
+                    changing l_check_ok.
+
+  loop at i_wbs_elements.
+* Conversion ABPSN
+    CALL FUNCTION 'CONVERSION_EXIT_ABPSN_INPUT'
+      EXPORTING
+        INPUT  = i_wbs_elements-wbs_element
+      IMPORTING
+        OUTPUT = l_wbs_element.
+    CALL FUNCTION 'CJPN_GET_WBS_ELEMENT'
+      EXPORTING
+        I_POSID     = l_wbs_element
+      IMPORTING
+        E_PRPS      = l_prps
+      EXCEPTIONS
+        INPUT_ERROR = 1
+        NOT_FOUND   = 2
+        OTHERS      = 3.
+    IF SY-SUBRC <> 0.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = CO1_METH-read
+          OBJ_TYP    = CO1_TYPE-wbs_element
+          OBJ_ID_EXT = i_wbs_elements-wbs_element
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E021(CJ)
+              WITH I_WBS_ELEMENTS-WBS_ELEMENT
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      write i_wbs_elements-wbs_element to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             space
+                             space.
+      delete i_wbs_elements.
+      continue.
+    ENDIF.
+    refresh lt_jest.
+    CALL FUNCTION 'STATUS_READ'
+      EXPORTING
+        OBJNR            = l_prps-objnr
+      IMPORTING
+        STSMA            = l_stsma
+      TABLES
+        STATUS           = lt_jest
+      EXCEPTIONS
+        OBJECT_NOT_FOUND = 1
+        OTHERS           = 2.
+
+    loop at lt_jest where inact = space.
+      if lt_jest-stat(1) = 'E'.
+*       user status in logon language
+        CALL FUNCTION 'STATUS_NUMBER_CONVERSION'
+          EXPORTING
+            LANGUAGE           = sy-langu
+            STATUS_NUMBER      = lt_jest-stat
+            STSMA              = l_stsma
+          IMPORTING
+            TXT04              = l_status
+          EXCEPTIONS
+            INSUFFICIENT_INPUT = 1
+            OBJECT_NOT_FOUND   = 2
+            STATUS_NOT_FOUND   = 3
+            STSMA_NOT_FOUND    = 4
+            OTHERS             = 5.
+        e_user_status-wbs_element = i_wbs_elements-wbs_element.
+        e_user_status-user_status = l_status.
+        append e_user_status.
+      else.
+*       system status in english
+        CALL FUNCTION 'STATUS_NUMBER_CONVERSION'
+          EXPORTING
+            LANGUAGE           = 'E'
+            STATUS_NUMBER      = lt_jest-stat
+            STSMA              = l_stsma
+          IMPORTING
+            TXT04              = l_status
+          EXCEPTIONS
+            INSUFFICIENT_INPUT = 1
+            OBJECT_NOT_FOUND   = 2
+            STATUS_NOT_FOUND   = 3
+            STSMA_NOT_FOUND    = 4
+            OTHERS             = 5.
+        e_system_status-wbs_element = i_wbs_elements-wbs_element.
+        e_system_status-system_status = l_status.
+        append e_system_status.
+      endif.
+    endloop.
+  endloop.
+
+* determine return
+  if i_wbs_elements[] is initial.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '005'
+      IMPORTING
+        bapireturn = return.
+  elseif i_wbs_elements[] ne lt_wbs_elements_orig[].
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '006'
+      IMPORTING
+        bapireturn = return.
+  endif.
+
+* Reset flag_no_dialog                                      "v_n_898737
+  perform set_no_dialog_flag in program saplco2o using space.
+
+* Set parameter FLAG_DIALOG_STATUS to old value
+    if lv_dialog_status is initial.
+      call function 'DIALOG_SET_WITH_DIALOG'.
+    else.
+      call function 'DIALOG_SET_NO_DIALOG'.
+    endif.                                                  "^_n_898737
+
+ENDFUNCTION.

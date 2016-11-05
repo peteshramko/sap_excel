@@ -1,0 +1,172 @@
+FUNCTION bapi_bus2054_change_multi.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_PROJECT_DEFINITION) TYPE
+*"        BAPI_BUS2001_NEW-PROJECT_DEFINITION
+*"  TABLES
+*"      IT_WBS_ELEMENT STRUCTURE  BAPI_BUS2054_CHG
+*"      IT_UPDATE_WBS_ELEMENT STRUCTURE  BAPI_BUS2054_UPD
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: lv_key                TYPE char24,
+        ls_wbs_element        LIKE bapi_bus2054_chg,
+        ls_update_wbs_element LIKE bapi_bus2054_upd,
+        lv_dialog_status_tmp  TYPE flag,
+        lv_msghand_num        LIKE sy-uzeit,
+        lv_msgnum             LIKE sy-uzeit,
+        lv_subrc              LIKE sy-subrc,
+        ls_object             TYPE psguid_ts_guid_for_extern,
+        lv_error,
+        lv_wbs_changes.
+
+* Exception 'message_handler_error' is NOT caught by design
+* to force a dump as we deal with a program error in this case
+  CALL FUNCTION 'PS_BAPI_INITIALIZE'
+       IMPORTING
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       TABLES
+            return          = et_return.
+
+  CALL FUNCTION 'PS_BAPI_PREPARE'
+       EXPORTING
+            i_method                 = con_wbs_change
+            i_project_name           = i_project_definition
+       IMPORTING
+            e_project_name           = i_project_definition
+       TABLES
+            extensionin              = extensionin
+            extensionout             = extensionout
+            it_wbs_element_change    = it_wbs_element
+            it_update_wbs_element    = it_update_wbs_element
+       EXCEPTIONS
+            precommit_already_called = 1
+            init_missing             = 2
+            one_project_violation    = 3
+            badi_error               = 4
+            project_read_error       = 5.
+  lv_subrc = sy-subrc.
+  IF NOT lv_subrc IS INITIAL.
+*   In case of prepare error, keep its messages for ALL objects of
+*   the loop. This is achieved by not resetting the log processing
+*   the first file, i.e. by using SPACE as message handler number
+    CLEAR lv_msgnum.
+  ELSE.
+    lv_msgnum = lv_msghand_num.
+  ENDIF.
+
+* unedit POSIDs in it_update_wbs_element and it_wbs_element
+* (WBS_ELEMENT, WBS_LEFT, WBS_UP)
+  PERFORM unedit_posid_upd  TABLES it_update_wbs_element.
+  PERFORM unedit_posids_chg TABLES it_wbs_element.
+  PERFORM unedit_posid_extin TABLES extensionin."n_1747210
+
+* change WBS element (without hierarchy)
+  LOOP AT it_wbs_element INTO ls_wbs_element.
+    IF lv_subrc IS INITIAL.
+      CALL FUNCTION 'CJ2054_CHANGE'
+           EXPORTING
+                i_project_definition  = i_project_definition
+                i_wbs_element         = ls_wbs_element
+*           importing
+*                e_object_unchanged    = lv_object_unchanged
+           TABLES
+                it_update_wbs_element = it_update_wbs_element
+                extensionin           = extensionin
+           EXCEPTIONS
+                element_not_changed   = 1
+                dates_not_changed     = 2.
+    ENDIF.
+
+    IF sy-subrc <> 0 OR lv_subrc <> 0.
+      MESSAGE e018(cnif_pi) WITH text-wbs ls_wbs_element-wbs_element
+                            INTO null.
+      lv_error = con_yes.
+    ELSE.
+      MESSAGE s010(cnif_pi) WITH text-wbs ls_wbs_element-wbs_element
+                            INTO null.
+      lv_wbs_changes = con_yes.
+*     Register object in success buffer table
+      CLEAR ls_object.
+      ls_object-object_type = con_objtype_wbs.
+      ls_object-wbs_element = ls_wbs_element-wbs_element.
+      ls_object-vbkz        = con_wbs_change.
+      CALL FUNCTION 'PS_BAPI_SUCCESS_BT_APPEND'
+           EXPORTING
+                i_object         = ls_object
+           EXCEPTIONS
+                wrong_parameters = 0.
+    ENDIF.
+
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+*   sy-msgv2 contains the converted WBS element
+    lv_key = sy-msgv2.
+*   Get remaining messages of current method (stored by:
+*   'message ... into null' AND 'perform put_sy_message(saplco2o)')
+    CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APPEND'
+         EXPORTING
+              objectkey     = lv_key
+              i_msghand_num = lv_msgnum
+         TABLES
+              return        = et_return.
+  ENDLOOP.
+
+* set global flag that WBS elements have been changed if necessary
+  IF NOT lv_wbs_changes IS INITIAL.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_wbs_data = con_yes.
+  ENDIF.
+
+  IF lv_error IS INITIAL.
+    LOOP AT it_wbs_element INTO ls_wbs_element.
+*     move WBS element to the correct place in the hierarchy
+      READ TABLE it_update_wbs_element INTO ls_update_wbs_element
+                 WITH KEY wbs_element = ls_wbs_element-wbs_element.
+      CALL FUNCTION 'CJ2054_BUILD_HIERARCHY'
+           EXPORTING
+                i_posid_source  = ls_wbs_element-wbs_element
+                i_posid_left    = ls_wbs_element-wbs_left
+                i_posid_up      = ls_wbs_element-wbs_up
+                i_update_left   = ls_update_wbs_element-wbs_left
+                i_update_up     = ls_update_wbs_element-wbs_up
+           EXCEPTIONS
+                hierarchy_error = 1.
+      IF sy-subrc <> 0.
+        MESSAGE e075(cnif_pi) WITH ls_wbs_element-wbs_element INTO null.
+*       change of hierachy for wbs-element & not possible
+        PERFORM put_sy_message(saplco2o).
+        lv_error = con_yes.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+* set global flag that an error has occurred if necessary
+  IF NOT lv_error IS INITIAL.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+  ENDIF.
+
+* Finish BAPI
+  CALL FUNCTION 'PS_BAPI_FINISH'
+       EXPORTING
+            i_project_name        = i_project_definition
+            i_dialog_status       = lv_dialog_status_tmp
+            i_msghand_num         = lv_msghand_num
+            i_method              = con_wbs_change
+            i_subrc               = lv_subrc
+       TABLES
+            it_wbs_element_change = it_wbs_element
+            it_update_wbs_element = it_update_wbs_element
+            return                = et_return
+            extensionin           = extensionin
+            extensionout          = extensionout.
+
+ENDFUNCTION.

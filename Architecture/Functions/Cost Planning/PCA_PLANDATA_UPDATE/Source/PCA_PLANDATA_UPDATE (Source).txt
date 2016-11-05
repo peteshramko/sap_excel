@@ -1,0 +1,272 @@
+FUNCTION pca_plandata_update.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_DOCTY) LIKE  RGLSI-DOCTY DEFAULT 'R0'
+*"     VALUE(I_PLACT) LIKE  T889-PLACT DEFAULT ' '
+*"     VALUE(I_BATCH) LIKE  SY-BATCH DEFAULT SPACE
+*"     VALUE(I_PERIOD_FROM) TYPE  PCA_PERIOD_FROM DEFAULT '001'
+*"     VALUE(I_PERIOD_TO) TYPE  PCA_PERIOD_TO DEFAULT '016'
+*"     VALUE(I_TEST) TYPE  CHAR1 DEFAULT SPACE
+*"  TABLES
+*"      T_GLPCT STRUCTURE  GLPCT
+*"  EXCEPTIONS
+*"      CHECK_ERROR
+*"      UPDATE_ERROR
+*"----------------------------------------------------------------------
+
+***********************************************************************
+* History of changes:
+* -------------------
+* 4.6C  RDI  new
+***********************************************************************
+
+
+* local data
+  DATA: lth_glpct_check  LIKE glpct OCCURS 0 WITH HEADER LINE,
+        lth_glpct_update LIKE glpct OCCURS 0 WITH HEADER LINE.
+
+  DATA: ls_glpct_key      TYPE pcpp_glpct_key,
+        ls_glpct_key_last TYPE pcpp_glpct_key,
+        ls_tka01          LIKE tka01.
+
+  DATA: l_pcacur              LIKE tka01-pcacur,
+        l_waers               LIKE t001-waers,
+        l_logsys              LIKE t000-logsys,
+        l_no_logsys_check     TYPE char1,
+        l_no_auth_check_racct TYPE char1,
+        l_lines               LIKE sy-tfill,
+        help_mesg             LIKE mesg,
+        help_subrc            LIKE sy-subrc.
+
+  DATA: i_budat LIKE glpca-budat.       "note 373975
+
+* check interface table T_GLPCT
+  DESCRIBE TABLE t_glpct LINES l_lines.
+  IF l_lines = 0.
+    EXIT.
+  ENDIF.
+
+*** derive functional area
+  DATA: ls_glpct LIKE glpct,
+        ls_accit LIKE accit,
+        ls_acchd LIKE acchd,
+        l_flg_farea_changed LIKE boole-boole.
+
+  LOOP AT t_glpct INTO ls_glpct.
+    IF ls_glpct-rfarea IS INITIAL.
+
+*     fill FI-interface structures
+      PERFORM fill_acchd_accit
+            USING    ls_glpct
+            CHANGING ls_acchd
+                     ls_accit.
+*     derive farea:
+      CALL FUNCTION 'AC_DOCUMENT_FAREA_SET_SINGLE'
+        EXPORTING
+          i_acchd         = ls_acchd
+        IMPORTING
+          e_farea_changed = l_flg_farea_changed
+        CHANGING
+          c_accit         = ls_accit
+        EXCEPTIONS
+          OTHERS          = 1.
+
+*     new farea was derived; take it over
+      IF ( l_flg_farea_changed  = 'X' ).
+        ls_glpct-rfarea = ls_accit-fkber.
+        MODIFY t_glpct FROM ls_glpct.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+* check decimals of quantities
+  PERFORM set_decimals_quantities TABLES t_glpct.
+
+* check parameters I_DOCTY and I_PLACT
+  CALL FUNCTION 'PCA_DOCUMENT_TYPE_CHECK'
+    EXPORTING
+      i_docty = i_docty
+      i_plact = i_plact
+    EXCEPTIONS
+      OTHERS  = 1.
+  IF sy-subrc <> 0.
+    MESSAGE ID      sy-msgid
+            TYPE    sy-msgty
+            NUMBER  sy-msgno
+            WITH    sy-msgv1
+                    sy-msgv2
+                    sy-msgv3
+                    sy-msgv4
+            RAISING check_error.
+  ENDIF.
+
+* sort interface table T_GLPCT by key dimensions
+  SORT t_glpct BY kokrs rbukrs rvers ryear rprctr racct stagr.
+
+* prepare table of records to update
+  LOOP AT t_glpct.
+    lth_glpct_check = t_glpct.
+    MOVE-CORRESPONDING lth_glpct_check TO ls_glpct_key.
+*   set fixed values.
+    PERFORM put_fixed_values USING ls_glpct_key
+                                   plikz_plan.
+*   check key dimensions
+    PERFORM check_key_dimensions USING ls_glpct_key
+                                       ls_glpct_key_last
+                                       plikz_plan
+                                       ls_tka01
+                                       i_period_from
+                                       i_period_to
+                                       i_budat          "note 373975
+                                       l_pcacur
+                                       l_waers
+                                       l_logsys
+                                       l_no_logsys_check
+                                       l_no_auth_check_racct
+                                       help_subrc
+                                       help_mesg.
+    IF help_subrc NE 0.
+      MESSAGE ID     help_mesg-arbgb
+              TYPE   help_mesg-msgty
+              NUMBER help_mesg-txtnr
+              WITH   help_mesg-msgv1
+                     help_mesg-msgv2
+                     help_mesg-msgv3
+                     help_mesg-msgv4
+              RAISING check_error.
+    ENDIF.
+*   handle BUE and/or fill EPRCTR
+    IF ls_glpct_key-sprctr = ls_glpct_key-rprctr
+       AND ls_tka01-pcbel = cross.
+*     don't send message w668(km) in posting function!
+      CLEAR ls_glpct_key_last.
+      CONTINUE.                                      "go to next line
+    ELSE.
+      ls_glpct_key-eprctr = ls_glpct_key-sprctr.
+    ENDIF.
+    ls_glpct_key_last = ls_glpct_key.          "save last key
+    MOVE-CORRESPONDING ls_glpct_key TO lth_glpct_check.
+*   currency conversion
+    READ TABLE itrvers WITH KEY plikz = plikz_plan
+                                kokrs = ls_glpct_key-kokrs
+                                rldnr = ls_glpct_key-rldnr
+                                rvers = ls_glpct_key-rvers
+                                ryear = ls_glpct_key-ryear.
+    IF sy-subrc NE 0.
+      MESSAGE x333(km) WITH text-305.  "missing entry in ITRVERS
+    ENDIF.
+    CALL FUNCTION 'ECPCA_CONVERT_CURRENCY_YEAR'
+      EXPORTING
+        i_pldat                   = itrvers-pldat
+        i_kurst                   = itrvers-kurst
+        i_pcacur                  = l_pcacur
+        i_waers                   = l_waers
+        i_rtcur                   = ls_glpct_key-rtcur
+        i_glpct                   = lth_glpct_check
+      IMPORTING
+        e_glpct                   = lth_glpct_check
+      EXCEPTIONS
+        missing_entry             = 1
+        error_currency_conversion = 2
+        internal_error            = 3
+        OTHERS                    = 4.
+    IF sy-subrc <> 0.
+      MESSAGE ID     sy-msgid
+              TYPE   sy-msgty
+              NUMBER sy-msgno
+              WITH   sy-msgv1
+                     sy-msgv2
+                     sy-msgv3
+                     sy-msgv4
+              RAISING check_error.
+    ENDIF.
+*   add line to LTH_GLPCT_CHECK
+    COLLECT lth_glpct_check.
+  ENDLOOP.
+
+* update plandata
+  IF i_test IS INITIAL.
+*   get first key into LS_GLPCT_KEY_LAST
+    CLEAR ls_glpct_key_last.
+    PERFORM put_fixed_values USING ls_glpct_key_last
+                                   plikz_plan.
+    READ TABLE lth_glpct_check INDEX 1.
+    IF sy-subrc = 0.
+      ls_glpct_key_last-kokrs  = lth_glpct_check-kokrs.
+      ls_glpct_key_last-rbukrs = lth_glpct_check-rbukrs.
+      ls_glpct_key_last-rvers  = lth_glpct_check-rvers.
+      ls_glpct_key_last-ryear  = lth_glpct_check-ryear.
+      ls_glpct_key_last-rprctr = lth_glpct_check-rprctr.
+      ls_glpct_key_last-racct  = lth_glpct_check-racct.
+      ls_glpct_key_last-stagr  = lth_glpct_check-stagr.
+    ELSE.
+      MESSAGE x888(km).
+    ENDIF.
+*   create packages of data with the same key
+    LOOP AT lth_glpct_check.
+      CLEAR ls_glpct_key.
+      PERFORM put_fixed_values USING ls_glpct_key
+                                     plikz_plan.
+      ls_glpct_key-kokrs  = lth_glpct_check-kokrs.
+      ls_glpct_key-rbukrs = lth_glpct_check-rbukrs.
+      ls_glpct_key-rvers  = lth_glpct_check-rvers.
+      ls_glpct_key-ryear  = lth_glpct_check-ryear.
+      ls_glpct_key-rprctr = lth_glpct_check-rprctr.
+      ls_glpct_key-racct  = lth_glpct_check-racct.
+      ls_glpct_key-stagr  = lth_glpct_check-stagr.
+      IF ls_glpct_key NE ls_glpct_key_last.
+*       update a package of data
+        PERFORM update_plandata TABLES lth_glpct_update
+                                USING  ls_glpct_key_last
+                                       i_docty
+                                       i_plact
+                                       i_batch
+                                       i_period_from
+                                       i_period_to
+                                       help_subrc
+                                       help_mesg.
+        IF help_subrc NE 0.
+          MESSAGE ID      help_mesg-arbgb
+                  TYPE    help_mesg-msgty
+                  NUMBER  help_mesg-txtnr
+                  WITH    help_mesg-msgv1
+                          help_mesg-msgv2
+                          help_mesg-msgv3
+                          help_mesg-msgv4
+                  RAISING update_error.
+        ENDIF.
+        CLEAR lth_glpct_update.
+        REFRESH lth_glpct_update.
+        ls_glpct_key_last = ls_glpct_key.
+      ENDIF.
+      lth_glpct_update = lth_glpct_check.
+      APPEND lth_glpct_update.
+    ENDLOOP.
+*   update last package of data
+    PERFORM update_plandata TABLES lth_glpct_update
+                            USING  ls_glpct_key_last
+                                   i_docty
+                                   i_plact
+                                   i_batch
+                                   i_period_from
+                                   i_period_to
+                                   help_subrc
+                                   help_mesg.
+    IF help_subrc NE 0.
+      MESSAGE ID      help_mesg-arbgb
+              TYPE    help_mesg-msgty
+              NUMBER  help_mesg-txtnr
+              WITH    help_mesg-msgv1
+                      help_mesg-msgv2
+                      help_mesg-msgv3
+                      help_mesg-msgv4
+              RAISING update_error.
+    ENDIF.
+*   commit update of all data packages
+    IF help_subrc = 0.
+      COMMIT WORK.
+    ENDIF.
+  ENDIF.
+
+ENDFUNCTION.

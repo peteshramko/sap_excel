@@ -1,0 +1,43 @@
+FUNCTION /EXCEL4AP/GLW_GETDATA_1.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  EXPORTING
+*"     VALUE(PROG) TYPE  STRING
+*"     VALUE(MSG) TYPE  STRING
+*"     VALUE(LIN) TYPE  STRING
+*"     VALUE(WRD) TYPE  STRING
+*"     VALUE(OFF) TYPE  STRING
+*"     VALUE(SHORTDUMPID) TYPE  STRING
+*"  TABLES
+*"      INPUT STRUCTURE  /EXCEL4AP/EXPORT_STRUCT
+*"      OUTPUT STRUCTURE  /EXCEL4AP/EXPORT_STRUCT
+*"      CODE STRUCTURE  /EXCEL4AP/72CHARSTRUCT
+*"----------------------------------------------------------------------
+*{   INSERT         SYDK900157                                        1
+
+  DATA OREF TYPE REF TO CX_ROOT.
+
+  TRY.
+
+      GENERATE SUBROUTINE POOL CODE NAME PROG
+    MESSAGE MSG
+    LINE LIN
+    WORD WRD
+    OFFSET OFF
+    SHORTDUMP-ID SHORTDUMPID.
+
+      IF SY-SUBRC = 0.
+        PERFORM E4ADYN IN PROGRAM (PROG) TABLES INPUT OUTPUT.
+      ENDIF.
+
+    CATCH  CX_ROOT INTO OREF.
+      OUTPUT-FIELD1 = 'E4AERR: ' + OREF->GET_TEXT( ).
+      APPEND OUTPUT.
+
+  ENDTRY.
+
+  FREE INPUT.
+  FREE CODE.
+
+*}   INSERT
+ENDFUNCTION.

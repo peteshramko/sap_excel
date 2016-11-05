@@ -1,0 +1,581 @@
+FUNCTION /EXCEL4AP/GLW_GETLINEITEMS_4_1.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(LEFT) TYPE  STRING
+*"     VALUE(RIGHT) TYPE  STRING
+*"     VALUE(FROM) TYPE  STRING
+*"     VALUE(USRCONFIRM) TYPE  /EXCEL4AP/TEXT6
+*"     VALUE(USRLIMIT) TYPE  I
+*"     VALUE(FUNCTIONTYPE) TYPE  STRING
+*"  TABLES
+*"      OUTPUT STRUCTURE  /EXCEL4AP/EXPORT_STRUCT
+*"      ZYEAR STRUCTURE  SELOPT
+*"      PERIODS STRUCTURE  SELOPT
+*"      RECTYPE STRUCTURE  SELOPT
+*"      VERSION STRUCTURE  SELOPT
+*"      ACCOUNTS STRUCTURE  SELOPT
+*"      LEDGER STRUCTURE  SELOPT
+*"      COMPANYCODE STRUCTURE  SELOPT
+*"      CONTAREA STRUCTURE  SELOPT
+*"      BUSAREA STRUCTURE  SELOPT
+*"      COSTCENTRE STRUCTURE  SELOPT
+*"      PROFCENTRE STRUCTURE  SELOPT
+*"      FUNCAREA STRUCTURE  SELOPT
+*"      SEGMENT STRUCTURE  SELOPT
+*"      COSTELEM STRUCTURE  SELOPT
+*"      IORDER STRUCTURE  SELOPT
+*"      USER1 STRUCTURE  SELOPT
+*"      ACTIVITY STRUCTURE  SELOPT
+*"      SKF STRUCTURE  SELOPT
+*"      FIELD_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      COND_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      GROUP_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      RETURN STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      USER2 STRUCTURE  SELOPT
+*"      USER3 STRUCTURE  SELOPT
+*"      USER4 STRUCTURE  SELOPT
+*"      USER5 STRUCTURE  SELOPT
+*"      USER6 STRUCTURE  SELOPT
+*"      USER7 STRUCTURE  SELOPT
+*"      USER8 STRUCTURE  SELOPT
+*"      USER9 STRUCTURE  SELOPT
+*"      USER10 STRUCTURE  SELOPT
+*"      USER11 STRUCTURE  SELOPT
+*"      USER12 STRUCTURE  SELOPT
+*"      USER13 STRUCTURE  SELOPT
+*"      USER14 STRUCTURE  SELOPT
+*"      USER15 STRUCTURE  SELOPT
+*"      USER16 STRUCTURE  SELOPT
+*"----------------------------------------------------------------------
+
+
+*{   INSERT         DEVK900071                                        1
+
+* Excel4Apps get line items - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 1.05.00
+* 3.0 Changes: Added more USER parameters. Remove WRITE which converts numerics based
+*              on user defaults.
+* 4.13 User confirmation type changed. NWA elements included in cumulative.
+
+  "Declarations - dynamic structures
+  DATA:
+            STRUCT_TYPE   TYPE REF TO CL_ABAP_STRUCTDESCR,
+            TABLE_TYPE    TYPE REF TO CL_ABAP_TABLEDESCR,
+            SYMB_TAB1     TYPE  CL_ABAP_STRUCTDESCR=>SYMBOL_TABLE,
+            SYMB_TAB2     TYPE  CL_ABAP_STRUCTDESCR=>SYMBOL_TABLE,
+            COMP_TAB3     TYPE  CL_ABAP_STRUCTDESCR=>COMPONENT_TABLE,
+            SYMB1         LIKE LINE OF SYMB_TAB1,
+            SYMB2         LIKE LINE OF SYMB_TAB2,
+            COMP3         LIKE LINE OF COMP_TAB3,
+            WA_FIELD(50)  TYPE C,
+            WA_STRUC      TYPE /EXCEL4AP/EXPORT_STRUCT,
+            TREF          TYPE REF TO DATA,
+            OREF          TYPE REF TO CX_ROOT,
+            WA_COMPRESS   TYPE /EXCEL4AP/EXPORT_STRUCT,
+            FUNCTIONNAME(30),
+            PROJECTTYPE(20),
+            CUMULATIVE(1),
+            WA_SELOPT             TYPE SELOPT,
+            TA_SELOPT             TYPE TABLE OF SELOPT,
+            WBS_INFO              LIKE PRPS,
+            PS_OBJECT_LIST        TYPE TABLE OF OBJLIST_PS,
+            PS_OBJECT             LIKE OBJLIST_PS,
+            PS_OBJECT_LIST_HIGH   TYPE TABLE OF OBJLIST_PS,
+            PS_RECH_TAB           TYPE TABLE OF IONRE,
+            PS_WBS_HIERARCHY_TAB  TYPE TABLE OF RCJ_PSPNR2,
+            NETWORK_NUMBER        LIKE AUFK-AUFNR,
+            ACTIVITY_NUMBER(4),
+            WA_ORDER              LIKE AUFK-AUFNR,
+            OPERATION_IN_ORDER    LIKE AFVC,
+            PROJECT_NUMBER        LIKE PROJ-PSPNR,
+            WBS_NUMBER            LIKE PRPS-PSPNR,
+            IT_ACTIVITY_LIST TYPE TABLE OF BAPI_ACTIVITY_LIST,
+            IT_ACTELEMENT_LIST TYPE TABLE OF BAPI_ACTELEMENT_LIST,
+            ET_ACTIVITY_ELEMENTS TYPE TABLE OF BAPI_BUS2002_ACTELEM_DETAIL,
+            ET_RETURN TYPE TABLE OF BAPIRET2,
+            WA_ACTELEMENT TYPE BAPI_BUS2002_ACTELEM_DETAIL,
+            WA_ACTIVITYLIST TYPE BAPI_ACTIVITY_LIST.
+
+  "Declarations - output
+  DATA: NUMLINES TYPE I, NUMFIELDS(2) TYPE C, LENGTH TYPE I, POINTER TYPE I, FILLER TYPE I.
+  DATA FIELDREF(20) TYPE C.
+
+
+  FIELD-SYMBOLS: <I_TAB> TYPE STANDARD TABLE,
+                 <F1> TYPE ANY, <F2> TYPE ANY, <F3> TYPE ANY,
+                 <F4> TYPE ANY.
+
+  "Clear results table
+  REFRESH OUTPUT.
+  REFRESH RETURN.
+
+  TRY.
+
+      "Get structure type for both tables
+      IF LEFT <> ''.
+        STRUCT_TYPE ?=
+          CL_ABAP_TYPEDESCR=>DESCRIBE_BY_NAME( LEFT ).
+        SYMB_TAB1 = STRUCT_TYPE->GET_SYMBOLS( ).
+      ENDIF.
+
+      IF RIGHT <> ''.
+        STRUCT_TYPE ?=
+          CL_ABAP_TYPEDESCR=>DESCRIBE_BY_NAME( RIGHT ).
+        SYMB_TAB2 = STRUCT_TYPE->GET_SYMBOLS( ).
+      ENDIF.
+
+      "Append fields from tab2 in tab1 if not already there
+      LOOP AT SYMB_TAB2 INTO SYMB2.
+        READ TABLE SYMB_TAB1 INTO SYMB1
+                WITH TABLE KEY NAME = SYMB2-NAME.
+        IF SY-SUBRC <> 0.
+          INSERT SYMB2 INTO TABLE SYMB_TAB1.
+        ENDIF.
+      ENDLOOP.
+
+      "Loop at our field list and add to component tab if in combined struc.
+      LOOP AT FIELD_LIST INTO WA_FIELD.
+
+        "Strip out alias if there is one
+        SEARCH WA_FIELD FOR '~'.
+        IF SY-SUBRC = 0.
+          LENGTH = STRLEN( WA_FIELD ).
+          POINTER = SY-FDPOS + 1.
+          WA_FIELD = WA_FIELD+POINTER(LENGTH).
+        ENDIF.
+
+        READ TABLE SYMB_TAB1 WITH TABLE KEY NAME = WA_FIELD INTO SYMB1.
+        IF SY-SUBRC = 0.
+          COMP3-NAME = SYMB1-NAME.
+          COMP3-TYPE = SYMB1-TYPE.
+          APPEND COMP3 TO COMP_TAB3.
+        ENDIF.
+      ENDLOOP.
+
+      "Dynamically create the final structure
+      CHECK COMP_TAB3 IS NOT INITIAL.
+      STRUCT_TYPE = CL_ABAP_STRUCTDESCR=>CREATE( COMP_TAB3 ).
+      TABLE_TYPE = CL_ABAP_TABLEDESCR=>CREATE( STRUCT_TYPE ).
+      CREATE DATA TREF TYPE HANDLE TABLE_TYPE.
+      ASSIGN TREF->* TO <I_TAB>.
+
+      SPLIT FUNCTIONTYPE AT '|' INTO FUNCTIONNAME PROJECTTYPE CUMULATIVE.
+
+      IF FUNCTIONNAME = 'GLW_GET_PROJECT'.
+
+        LOOP AT USER2 INTO WA_SELOPT.
+
+          IF PROJECTTYPE = 'PROJECT'.
+
+            CALL FUNCTION 'CONVERSION_EXIT_KONPD_INPUT'
+              EXPORTING
+                INPUT  = WA_SELOPT-LOW
+              IMPORTING
+                OUTPUT = PROJECT_NUMBER.
+
+            IF SY-SUBRC <> 0.
+
+              RETURN-XL4AFIELD = 'PROJECT CONVERSION'.
+              APPEND RETURN.
+
+            ELSE.
+
+              CLEAR PS_OBJECT_LIST.
+              CLEAR WBS_INFO.
+              CLEAR PS_RECH_TAB.
+              CLEAR PS_WBS_HIERARCHY_TAB.
+
+              CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                EXPORTING
+                  I_PRONR          = PROJECT_NUMBER
+                  I_WITH_HIERARCHY = CUMULATIVE
+                  I_WITH_NETWORK   = CUMULATIVE
+                  I_WITH_ORDERS    = CUMULATIVE
+                IMPORTING
+                  E_PRPS           = WBS_INFO
+                TABLES
+                  T_OBJECTS        = PS_OBJECT_LIST
+                  RECH_TAB         = PS_RECH_TAB
+                  PRPS_TAB         = PS_WBS_HIERARCHY_TAB.
+
+              IF SY-SUBRC <> 0.
+
+                RETURN-XL4AFIELD = 'PRJ/WBS OBJECT NUMBER'.
+                APPEND RETURN.
+
+              ELSE.
+
+                LOOP AT PS_OBJECT_LIST INTO PS_OBJECT.
+
+                  WA_SELOPT-LOW = PS_OBJECT-OBJNR.
+                  APPEND WA_SELOPT TO TA_SELOPT.
+
+                ENDLOOP.
+
+              ENDIF.
+
+            ENDIF.
+
+          ELSEIF PROJECTTYPE = 'WBS'.
+
+            CALL FUNCTION 'CONVERSION_EXIT_ABPSP_INPUT'
+              EXPORTING
+                INPUT  = WA_SELOPT-LOW
+              IMPORTING
+                OUTPUT = WBS_NUMBER.
+
+            IF SY-SUBRC <> 0.
+
+              RETURN-XL4AFIELD = 'WBS CONVERSION'.
+              APPEND RETURN.
+
+            ELSE.
+
+              CLEAR PS_OBJECT_LIST.
+              CLEAR WBS_INFO.
+              CLEAR PS_RECH_TAB.
+              CLEAR PS_WBS_HIERARCHY_TAB.
+
+              CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                EXPORTING
+                  I_PSPNR          = WBS_NUMBER
+                  I_WITH_HIERARCHY = CUMULATIVE
+                  I_WITH_NETWORK   = CUMULATIVE
+                  I_WITH_ORDERS    = CUMULATIVE
+                IMPORTING
+                  E_PRPS           = WBS_INFO
+                TABLES
+                  T_OBJECTS        = PS_OBJECT_LIST
+                  RECH_TAB         = PS_RECH_TAB
+                  PRPS_TAB         = PS_WBS_HIERARCHY_TAB.
+
+              IF SY-SUBRC <> 0.
+
+                RETURN-XL4AFIELD = 'PRJ/WBS OBJECT NUMBER'.
+                APPEND RETURN.
+
+              ELSE.
+
+                LOOP AT PS_OBJECT_LIST INTO PS_OBJECT.
+
+                  WA_SELOPT-LOW = PS_OBJECT-OBJNR.
+
+                  IF WA_SELOPT-HIGH <> ''.
+
+                    CALL FUNCTION 'CONVERSION_EXIT_ABPSP_INPUT'
+                      EXPORTING
+                        INPUT  = WA_SELOPT-HIGH
+                      IMPORTING
+                        OUTPUT = WBS_NUMBER.
+
+                    IF SY-SUBRC <> 0.
+
+                      RETURN-XL4AFIELD = 'WBS CONVERSION'.
+                      APPEND RETURN.
+
+                    ELSE.
+
+                      CLEAR WBS_INFO.
+                      CLEAR PS_RECH_TAB.
+                      CLEAR PS_WBS_HIERARCHY_TAB.
+
+                      CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                        EXPORTING
+                          I_PSPNR          = WBS_NUMBER
+                          I_WITH_HIERARCHY = CUMULATIVE
+                          I_WITH_NETWORK   = CUMULATIVE
+                          I_WITH_ORDERS    = CUMULATIVE
+                        IMPORTING
+                          E_PRPS           = WBS_INFO
+                        TABLES
+                          T_OBJECTS        = PS_OBJECT_LIST
+                          RECH_TAB         = PS_RECH_TAB
+                          PRPS_TAB         = PS_WBS_HIERARCHY_TAB.
+
+                      IF SY-SUBRC <> 0.
+
+                        RETURN-XL4AFIELD = 'PRJ/WBS OBJECT NUMBER'.
+                        APPEND RETURN.
+
+                      ELSE.
+
+                        "Can only be one upper item
+                        READ TABLE PS_OBJECT_LIST INDEX 1 INTO PS_OBJECT.
+                        WA_SELOPT-HIGH = PS_OBJECT-OBJNR.
+
+                      ENDIF.
+
+                    ENDIF.
+
+                  ENDIF.
+
+                  APPEND WA_SELOPT TO TA_SELOPT.
+
+                ENDLOOP.
+
+              ENDIF.
+
+            ENDIF.
+
+          ELSEIF PROJECTTYPE = 'NETWORK'.
+
+            CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+              EXPORTING
+                INPUT  = WA_SELOPT-LOW
+              IMPORTING
+                OUTPUT = NETWORK_NUMBER.
+
+            IF SY-SUBRC <> 0.
+
+              RETURN-XL4AFIELD = 'NETWORK CONVERSION'.
+              APPEND RETURN.
+
+            ELSE.
+
+*First get the related WBS number so that we can re run the function
+*to include Orders settling to Networks
+
+              CLEAR PS_OBJECT_LIST.
+              CLEAR WBS_INFO.
+              CLEAR PS_RECH_TAB.
+              CLEAR PS_WBS_HIERARCHY_TAB.
+
+              CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                EXPORTING
+                  I_NPLNR          = NETWORK_NUMBER
+                  I_WITH_HIERARCHY = CUMULATIVE
+                  I_WITH_NETWORK   = CUMULATIVE
+                  I_WITH_ORDERS    = CUMULATIVE
+                IMPORTING
+                  E_PRPS           = WBS_INFO
+                TABLES
+                  T_OBJECTS        = PS_OBJECT_LIST
+                  RECH_TAB         = PS_RECH_TAB
+                  PRPS_TAB         = PS_WBS_HIERARCHY_TAB.
+
+              IF SY-SUBRC <> 0.
+
+                RETURN-XL4AFIELD = 'NETWORK OBJECT NUMBER'.
+                APPEND RETURN.
+
+              ELSE.
+
+                "Get the related WBS
+                READ TABLE PS_OBJECT_LIST INDEX 1 INTO PS_OBJECT.
+                WBS_NUMBER = PS_OBJECT-PSPNR.
+
+                CLEAR PS_OBJECT_LIST.
+                CLEAR WBS_INFO.
+                CLEAR PS_RECH_TAB.
+                CLEAR PS_WBS_HIERARCHY_TAB.
+
+                "Now call with both WBS and Network number
+                "so we can get the orders linked if any.
+                CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                  EXPORTING
+                    I_NPLNR          = NETWORK_NUMBER
+                    I_PSPNR          = WBS_NUMBER
+                    I_WITH_HIERARCHY = CUMULATIVE
+                    I_WITH_NETWORK   = CUMULATIVE
+                    I_WITH_ORDERS    = CUMULATIVE
+                  IMPORTING
+                    E_PRPS           = WBS_INFO
+                  TABLES
+                    T_OBJECTS        = PS_OBJECT_LIST
+                    RECH_TAB         = PS_RECH_TAB
+                    PRPS_TAB         = PS_WBS_HIERARCHY_TAB.
+
+                IF SY-SUBRC <> 0.
+
+                  RETURN-XL4AFIELD = 'NET/WBS OBJECT NUMBER'.
+                  APPEND RETURN.
+
+                ELSE.
+
+                  LOOP AT PS_OBJECT_LIST INTO PS_OBJECT.
+
+                    "Ignore the WBS object itself
+                    IF PS_OBJECT-OBJNR(2) <> 'PR'.
+
+                      WA_SELOPT-LOW = PS_OBJECT-OBJNR.
+                      APPEND WA_SELOPT TO TA_SELOPT.
+
+                    ENDIF.
+
+                  ENDLOOP.
+
+                ENDIF.
+
+              ENDIF.
+
+            ENDIF.
+
+          ELSEIF PROJECTTYPE = 'NETWORK_ACTIVITY'.
+
+            SPLIT WA_SELOPT-LOW AT ' ' INTO NETWORK_NUMBER ACTIVITY_NUMBER.
+
+            CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+              EXPORTING
+                INPUT  = NETWORK_NUMBER
+              IMPORTING
+                OUTPUT = NETWORK_NUMBER.
+
+            "Get network activity object number
+            CALL FUNCTION 'READ_NETWORK_AUFPL_APLZL'
+              EXPORTING
+                NPLNR     = NETWORK_NUMBER
+                VORNR     = ACTIVITY_NUMBER
+                AUTYP_IMP = 20
+              IMPORTING
+                AFVC_EXP  = OPERATION_IN_ORDER.
+
+            IF SY-SUBRC <> 0.
+
+              RETURN-XL4AFIELD = 'NETWORK ACTIVITY CONVERSION'.
+              APPEND RETURN.
+
+            ELSE.
+
+              WA_SELOPT-LOW = OPERATION_IN_ORDER-OBJNR.
+              APPEND WA_SELOPT TO TA_SELOPT.
+
+              IF CUMULATIVE = 'X'.
+
+                "Now get any orders linked to network activity
+                SELECT AUFNR FROM  AFKO INTO WA_ORDER
+                       WHERE  AUFPT  = OPERATION_IN_ORDER-AUFPL
+                       AND    APLZT  = OPERATION_IN_ORDER-APLZL.
+
+                  SELECT OBJNR FROM AUFK INTO WA_SELOPT-LOW
+                    WHERE AUFNR = WA_ORDER.
+
+                    APPEND WA_SELOPT TO TA_SELOPT.
+
+                  ENDSELECT.
+
+                ENDSELECT.
+
+                "And any activity elements
+                WA_ACTIVITYLIST-ACTIVITY = ACTIVITY_NUMBER.
+                APPEND WA_ACTIVITYLIST TO IT_ACTIVITY_LIST.
+
+                CALL FUNCTION 'CN2002_ACTELEMENT_GETDATA'
+                  EXPORTING
+                    I_NETWORK_NUMBER     = NETWORK_NUMBER
+                  TABLES
+                    IT_ACTIVITY_LIST     = IT_ACTIVITY_LIST
+                    IT_ACTELEMENT_LIST   = IT_ACTELEMENT_LIST
+                    ET_ACTIVITY_ELEMENTS = ET_ACTIVITY_ELEMENTS
+                    ET_RETURN            = ET_RETURN
+                  EXCEPTIONS
+                    DATA_NOT_RETRIEVED   = 1
+                    OTHERS               = 2.
+
+                IF SY-SUBRC <> 0.
+
+                  RETURN-XL4AFIELD = 'NETWORK ACTIVITY ELEMENT RETRIEVAL'.
+                  APPEND RETURN.
+
+                ELSE.
+
+                  "Get the object number for each activity element
+                  LOOP AT ET_ACTIVITY_ELEMENTS INTO WA_ACTELEMENT.
+
+                    "Get network activity object number
+                    CALL FUNCTION 'READ_NETWORK_AUFPL_APLZL'
+                      EXPORTING
+                        NPLNR     = NETWORK_NUMBER
+                        VORNR     = WA_ACTELEMENT-ELEMENT
+                        AUTYP_IMP = 20
+                      IMPORTING
+                        AFVC_EXP  = OPERATION_IN_ORDER.
+
+                    IF SY-SUBRC <> 0.
+                      RETURN-XL4AFIELD = 'NETWORK ACTIVITY CONVERSION'.
+                      APPEND RETURN.
+                    ELSE.
+                      WA_SELOPT-LOW = OPERATION_IN_ORDER-OBJNR.
+                      APPEND WA_SELOPT TO TA_SELOPT.
+                    ENDIF.
+
+                  ENDLOOP.
+
+                ENDIF.
+
+              ENDIF.
+
+            ENDIF.
+
+          ENDIF.
+
+        ENDLOOP.
+
+        USER2[] = TA_SELOPT[].
+
+      ENDIF.
+
+      "Fetch the data
+      IF USRCONFIRM = 'X'.
+        SELECT (FIELD_LIST) INTO CORRESPONDING FIELDS OF TABLE <I_TAB>
+          FROM (FROM) WHERE (COND_LIST).
+      ELSE.
+        SELECT (FIELD_LIST) INTO CORRESPONDING FIELDS OF TABLE <I_TAB>
+              FROM (FROM) UP TO 1000 ROWS WHERE (COND_LIST).
+      ENDIF.
+
+      "Number of lines returned
+      DESCRIBE TABLE <I_TAB> LINES NUMLINES.
+
+      "Return if more than 1000 lines selected.
+      IF USRCONFIRM <> 'X' AND NUMLINES = 1000.
+        WA_STRUC-FIELD1 = 'GT1000'.
+        APPEND WA_STRUC TO RETURN.
+        EXIT.
+      ENDIF.
+
+      FIELDREF = 'OUTPUT-FIELD'.
+
+      "Populate output
+      DO NUMLINES TIMES.
+        READ TABLE <I_TAB> INDEX SY-INDEX ASSIGNING <F1>.
+        NUMFIELDS = 0.
+        LOOP AT FIELD_LIST INTO WA_FIELD.
+
+          "Strip out alias if there is one
+          SEARCH WA_FIELD FOR '~'.
+          IF SY-SUBRC = 0.
+            LENGTH = STRLEN( WA_FIELD ).
+            POINTER = SY-FDPOS + 1.
+            WA_FIELD = WA_FIELD+POINTER(LENGTH).
+          ENDIF.
+
+
+          NUMFIELDS = NUMFIELDS + 1.
+          IF NUMFIELDS < 31.
+            ASSIGN WA_FIELD TO <F2>.
+            ASSIGN COMPONENT <F2> OF STRUCTURE <F1> TO <F3>.
+            FIELDREF+12 = NUMFIELDS.
+            ASSIGN (FIELDREF) TO <F4>.
+            <F4> = <F3>.
+          ENDIF.
+        ENDLOOP.
+        APPEND OUTPUT.
+      ENDDO.
+
+      "Catch errors and return description
+    CATCH CX_SY_CREATE_DATA_ERROR INTO OREF.
+      RETURN-XL4AFIELD = OREF->GET_TEXT( ).
+      APPEND RETURN.
+    CATCH CX_SY_DYNAMIC_OSQL_SEMANTICS INTO OREF.
+      RETURN-XL4AFIELD = OREF->GET_TEXT( ).
+      APPEND RETURN.
+
+
+  ENDTRY.
+
+*}   INSERT
+
+
+ENDFUNCTION.

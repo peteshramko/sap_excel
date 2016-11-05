@@ -1,0 +1,179 @@
+FUNCTION bapi_bus2002_act_create_multi.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_NUMBER) LIKE  BAPI_NETWORK_LIST-NETWORK
+*"  TABLES
+*"      IT_ACTIVITY STRUCTURE  BAPI_BUS2002_ACT_NEW
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: lv_key               TYPE char24,
+        lv_subrc             LIKE sy-subrc,
+        lv_error             type c,
+        lv_dialog_status_tmp TYPE flag,
+        lv_msghand_num       LIKE sy-uzeit,
+        lv_msgnum            like sy-uzeit,
+
+        ls_object            type PSGUID_TS_GUID_FOR_EXTERN,
+
+        lt_activity          type table of bapi_bus2002_act_new.
+
+  FIELD-SYMBOLS: <act>       TYPE bapi_bus2002_act_new.
+
+  lt_activity[] = it_activity[].
+
+* Convert activity element numbers in NEW-table
+  call function 'CN2002_ACT_CONV_KEY_OF_ACT_AEL'
+       tables
+            it_new_activity = lt_activity.
+
+* Init BAPI
+* Exception 'message_handler_error' is NOT caught by design to force a
+* dump as we deal with a program error in this case
+  CALL FUNCTION 'PS_BAPI_INITIALIZE'
+       IMPORTING
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       TABLES
+            return          = et_return.
+* Prepare BAPI
+  CALL FUNCTION 'PS_BAPI_PREPARE'
+       EXPORTING
+            i_number                 = i_number
+            i_method                 = con_act_create
+       IMPORTING
+            e_number                 = i_number
+       TABLES
+            it_activity_create       = lt_activity
+            extensionin              = extensionin
+            extensionout             = extensionout
+       EXCEPTIONS
+            precommit_already_called = 1
+            init_missing             = 2
+            network_read_error       = 3
+            one_project_violation    = 4
+            badi_error               = 5.
+  lv_subrc = sy-subrc.
+
+  if not lv_subrc is initial.
+*   In case of prepare error, keep its messages for ALL objects of
+*   the loop. This is achieved by not resetting the log processing the
+*   first file, i.e. by using SPACE as message handler number
+    clear lv_msgnum.
+*   Prepare failed: convert network number
+    CALL FUNCTION 'EXT_NETWORK_GET_INT_NETWORK'
+         EXPORTING
+              i_ext_network = i_number
+         IMPORTING
+              e_int_network = i_number
+         EXCEPTIONS
+              error_occured = 0.
+  else.
+    lv_msgnum = lv_msghand_num.
+  endif.
+
+  LOOP AT lt_activity ASSIGNING <act>.
+    write i_number to lv_key.
+    CONCATENATE lv_key <act>-activity INTO lv_key
+                SEPARATED BY space.
+    IF lv_subrc IS INITIAL.
+      CALL FUNCTION 'CN2002_ACTIVITY_CREATE'
+           EXPORTING
+                i_number             = i_number
+                i_activity           = <act>
+           TABLES
+                extensionin            = extensionin
+           EXCEPTIONS
+                activity_not_created = 1.
+    ENDIF.
+    if not sy-subrc is initial or
+       not lv_subrc is initial.
+*     Error in prepare or whilst creation
+      lv_error = con_yes.
+      MESSAGE e007(cnif_pi) WITH text-act lv_key
+                            INTO null.
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_error = con_yes.
+*     Delete current activity in error case to force late BAdI only for
+*     success cases
+      delete lt_activity.
+    ELSE.
+*     Creation successful
+      clear lv_error.
+      MESSAGE s004(cnif_pi) WITH text-act lv_key
+                            INTO null.
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_network_data = con_yes.
+*     Register object in success buffer table
+      clear ls_object.
+      ls_object-object_type = con_objtype_activity.
+      ls_object-network     = i_number.
+      ls_object-activity    = <act>-activity.
+      ls_object-vbkz        = con_act_create.
+      CALL FUNCTION 'PS_BAPI_SUCCESS_BT_APPEND'
+           EXPORTING
+                I_OBJECT         = ls_object
+           EXCEPTIONS
+                WRONG_PARAMETERS = 0.
+    ENDIF.
+
+*   Get last message of current activity ('S' vs. 'E') as first one in
+*   the log (only 'message ... into null' NOT followed by 'perform
+*   put_sy_message(saplco2o)')
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+
+*   Get remaining messages of current activity (stored by 'message ...
+*   into null' AND 'perform put_sy_message(saplco2o)')
+    CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APP_EXT'
+         EXPORTING
+              i_objectkey   = lv_key
+              i_msghand_num = lv_msgnum
+              i_error_case  = lv_error
+         TABLES
+              et_return     = et_return.
+
+  ENDLOOP.
+
+* In case of prepare error, LV_MSGNUM is SPACE and its messages are
+* still in the log. Delete them now (after the LOOP) to avoid them to
+* re-appear in the possibly written late BAdI-Log
+  if     lv_msgnum      is initial and
+     not lv_msghand_num is initial.
+    CALL FUNCTION 'METHOD_LOG_INIT'
+         EXPORTING
+              msghand_num = lv_msghand_num.
+  endif.
+
+* Within PS_BAPI_POST, skip late BAdI completely (controlled by
+* I_SUBRC) if
+* - prepare failed (LV_SUBRC is already not initial)
+* - prepare did not fail but nevertheless no success file exists
+*   (LT_ACTIVITY is empty and LV_SUBRC is hence set)
+* Otherwise, only for success files (contents of LT_ACTIVITY)
+  if lv_subrc      is initial and
+     lt_activity[] is initial.
+    lv_subrc = 4.
+  endif.
+
+* Finish BAPI
+  CALL FUNCTION 'PS_BAPI_FINISH'
+       EXPORTING
+            i_number           = i_number
+            i_dialog_status    = lv_dialog_status_tmp
+            i_msghand_num      = lv_msghand_num
+            i_method           = con_act_create
+            i_subrc            = lv_subrc
+       TABLES
+            it_activity_create = lt_activity
+            return             = et_return
+            extensionin        = extensionin
+            extensionout       = extensionout.
+
+ENDFUNCTION.

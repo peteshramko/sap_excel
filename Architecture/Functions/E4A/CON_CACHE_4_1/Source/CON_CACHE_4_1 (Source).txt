@@ -1,0 +1,243 @@
+FUNCTION /EXCEL4AP/CON_CACHE_4_1.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(LEFT) TYPE  STRING
+*"     VALUE(RIGHT) TYPE  STRING
+*"     VALUE(FROM) TYPE  STRING
+*"     VALUE(WANCOMPRESS) TYPE  I
+*"     VALUE(USE_FOR_ALL_ENTRIES) TYPE  BOOLEAN
+*"     VALUE(FIELD_FOR_ALL_ENTRIES) TYPE  STRING
+*"  TABLES
+*"      OUTPUT STRUCTURE  /EXCEL4AP/OUTPUT_STRUCT
+*"      FIELD_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      COND_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      RETURN STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      ORD_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      CONV_LIST STRUCTURE  /EXCEL4AP/EXPORT_STRUCT
+*"      FOR_ALL_ENTRIES_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"----------------------------------------------------------------------
+
+
+*{   INSERT         DEVK900059                                        1
+*
+* Excel4Apps connector cache - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 2.00
+
+  "Declarations - dynamic structures
+  DATA:
+            STRUCT_TYPE     TYPE REF TO CL_ABAP_STRUCTDESCR,
+            TABLE_TYPE      TYPE REF TO CL_ABAP_TABLEDESCR,
+            SYMB_TAB1       TYPE  CL_ABAP_STRUCTDESCR=>SYMBOL_TABLE,
+            SYMB_TAB2       TYPE  CL_ABAP_STRUCTDESCR=>SYMBOL_TABLE,
+            COMP_TAB3       TYPE  CL_ABAP_STRUCTDESCR=>COMPONENT_TABLE,
+            SYMB1           LIKE LINE OF SYMB_TAB1,
+            SYMB2           LIKE LINE OF SYMB_TAB2,
+            COMP3           LIKE LINE OF COMP_TAB3,
+            WA_FIELD(50)    TYPE C,
+            TREF            TYPE REF TO DATA,
+            OREF            TYPE REF TO CX_ROOT,
+            WA_COMPRESS     TYPE /EXCEL4AP/EXPORT_STRUCT,
+            WA_CONV         TYPE /EXCEL4AP/EXPORT_STRUCT,
+            SORT_ORDER_TAB  TYPE ABAP_SORTORDER_TAB,
+            SORT_ORDER      TYPE ABAP_SORTORDER.
+
+  "Declarations - output
+  DATA: NUMLINES TYPE I, NUMFIELDS(2) TYPE C, LENGTH TYPE I, POINTER TYPE I, FILLER TYPE I.
+  DATA FIELDREF(20) TYPE C.
+
+  FIELD-SYMBOLS: <I_TAB> TYPE STANDARD TABLE,
+                 <I_TAB2> TYPE STANDARD TABLE,
+                 <F1> TYPE ANY, <F2> TYPE ANY, <F3> TYPE ANY,
+                 <F4> TYPE ANY, <WA_ITAB2> TYPE ANY, <WA_ITAB2_FIELD> TYPE ANY.
+
+  "Clear results tables
+  REFRESH OUTPUT.
+  REFRESH RETURN.
+
+  TRY.
+
+      "Get structure type for both tables
+      IF LEFT <> ''.
+        STRUCT_TYPE ?=
+          CL_ABAP_TYPEDESCR=>DESCRIBE_BY_NAME( LEFT ).
+        SYMB_TAB1 = STRUCT_TYPE->GET_SYMBOLS( ).
+      ENDIF.
+
+      IF RIGHT <> ''.
+        STRUCT_TYPE ?=
+          CL_ABAP_TYPEDESCR=>DESCRIBE_BY_NAME( RIGHT ).
+        SYMB_TAB2 = STRUCT_TYPE->GET_SYMBOLS( ).
+      ENDIF.
+
+      "Append fields from tab2 in tab1 if not already there
+      LOOP AT SYMB_TAB2 INTO SYMB2.
+        READ TABLE SYMB_TAB1 INTO SYMB1
+                WITH TABLE KEY NAME = SYMB2-NAME.
+        IF SY-SUBRC <> 0.
+          INSERT SYMB2 INTO TABLE SYMB_TAB1.
+        ENDIF.
+      ENDLOOP.
+
+      "Loop at our field list
+      LOOP AT FIELD_LIST INTO WA_FIELD.
+
+        "Strip out alias if there is one
+        SEARCH WA_FIELD FOR '~'.
+        IF SY-SUBRC = 0.
+          LENGTH = STRLEN( WA_FIELD ).
+          POINTER = SY-FDPOS + 1.
+          WA_FIELD = WA_FIELD+POINTER(LENGTH).
+        ENDIF.
+
+        "Add to component tab if our field in combined struc
+        READ TABLE SYMB_TAB1 WITH TABLE KEY NAME = WA_FIELD INTO SYMB1.
+        IF SY-SUBRC = 0.
+          COMP3-NAME = SYMB1-NAME.
+          COMP3-TYPE = SYMB1-TYPE.
+          APPEND COMP3 TO COMP_TAB3.
+        ENDIF.
+      ENDLOOP.
+
+      "Dynamically create the final structure
+      CHECK COMP_TAB3 IS NOT INITIAL.
+      STRUCT_TYPE = CL_ABAP_STRUCTDESCR=>CREATE( COMP_TAB3 ).
+      TABLE_TYPE = CL_ABAP_TABLEDESCR=>CREATE( STRUCT_TYPE ).
+      CREATE DATA TREF TYPE HANDLE TABLE_TYPE.
+      ASSIGN TREF->* TO <I_TAB>.
+
+      "Fetch the data
+      IF USE_FOR_ALL_ENTRIES <> 'X'.
+
+        SELECT (FIELD_LIST) INTO CORRESPONDING FIELDS OF TABLE <I_TAB>
+          FROM (FROM) WHERE (COND_LIST) ORDER BY (ORD_LIST).
+
+      ELSE.
+
+        "Create for all entries table of same type
+        CREATE DATA TREF TYPE HANDLE TABLE_TYPE.
+        ASSIGN TREF->* TO <I_TAB2>.
+
+        "Create a work area of same structure as itab2
+        CREATE DATA TREF TYPE HANDLE STRUCT_TYPE.
+        ASSIGN TREF->* TO <WA_ITAB2>.
+
+        "Get the field for all entries
+        CONCATENATE '<WA_ITAB2>-' FIELD_FOR_ALL_ENTRIES
+        INTO FIELD_FOR_ALL_ENTRIES.
+
+        "Assign output column to field symbol
+        ASSIGN (FIELD_FOR_ALL_ENTRIES) TO <WA_ITAB2_FIELD>.
+
+        LOOP AT FOR_ALL_ENTRIES_LIST INTO <WA_ITAB2_FIELD>.
+
+          APPEND <WA_ITAB2> TO <I_TAB2>.
+
+        ENDLOOP.
+
+        SELECT (FIELD_LIST) INTO CORRESPONDING FIELDS OF TABLE <I_TAB>
+                 FROM (FROM)
+          FOR ALL ENTRIES IN <I_TAB2>
+          WHERE (COND_LIST).
+
+        "Sort the table
+        LOOP AT ORD_LIST INTO WA_FIELD.
+          SORT_ORDER-NAME = WA_FIELD.
+          APPEND SORT_ORDER TO SORT_ORDER_TAB.
+        ENDLOOP.
+
+        SORT <I_TAB> BY (SORT_ORDER_TAB).
+
+      ENDIF.
+
+      "Prep output
+      DESCRIBE TABLE <I_TAB> LINES NUMLINES.
+
+      "Identify output column
+      FIELDREF = 'OUTPUT-FIELD'.
+
+      "Loop at itab
+      DO NUMLINES TIMES.
+
+        "Assign record to field symbol
+        READ TABLE <I_TAB> INDEX SY-INDEX ASSIGNING <F1>.
+        NUMFIELDS = 0.
+
+        "Extract component for our fields
+        LOOP AT FIELD_LIST INTO WA_FIELD.
+
+          "Strip out alias if there is one
+          SEARCH WA_FIELD FOR '~'.
+          IF SY-SUBRC = 0.
+            LENGTH = STRLEN( WA_FIELD ).
+            POINTER = SY-FDPOS + 1.
+            WA_FIELD = WA_FIELD+POINTER(LENGTH).
+          ENDIF.
+
+          "Check column in our structure
+          NUMFIELDS = NUMFIELDS + 1.
+          IF NUMFIELDS < 31.
+
+            "Component for our field
+            ASSIGN WA_FIELD TO <F2>.
+            ASSIGN COMPONENT <F2> OF STRUCTURE <F1> TO <F3>.
+            FIELDREF+12 = NUMFIELDS.
+            "Assign output column to field symbol
+            ASSIGN (FIELDREF) TO <F4>.
+
+            "Do conversion at the same time
+            LOOP AT CONV_LIST INTO WA_CONV WHERE FIELD1 = WA_FIELD.
+
+              CALL FUNCTION WA_CONV-FIELD2
+                EXPORTING
+                  INPUT  = <F3>
+                IMPORTING
+                  OUTPUT = <F3>.
+
+            ENDLOOP.
+
+            "Assign the value of our field to the output column
+            <F4> = <F3>.
+
+          ENDIF.
+
+        ENDLOOP.
+
+        APPEND OUTPUT.
+
+      ENDDO.
+
+
+      "Catch errors and return description
+    CATCH CX_SY_CREATE_DATA_ERROR INTO OREF.
+      RETURN-XL4AFIELD = OREF->GET_TEXT( ).
+      APPEND RETURN.
+    CATCH CX_SY_DYNAMIC_OSQL_SEMANTICS INTO OREF.
+      RETURN-XL4AFIELD = OREF->GET_TEXT( ).
+      APPEND RETURN.
+
+  ENDTRY.
+
+  "WAN Compress
+  IF WANCOMPRESS > 0.
+    FILLER = WANCOMPRESS - NUMLINES.
+    IF FILLER > 0.
+      WA_COMPRESS-FIELD1 = 'EXCEL4APPSWANCOM'.
+      DO FILLER TIMES.
+        APPEND WA_COMPRESS TO OUTPUT.
+      ENDDO.
+    ENDIF.
+  ENDIF.
+
+  "Clear request tables
+  REFRESH FIELD_LIST.
+  REFRESH COND_LIST.
+  REFRESH ORD_LIST.
+  REFRESH CONV_LIST.
+
+*}   INSERT
+
+
+
+ENDFUNCTION.

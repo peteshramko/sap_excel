@@ -1,0 +1,59 @@
+FUNCTION /EXCEL4AP/CON_WANDTABLES_1.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(OPERATION) TYPE  STRING
+*"  TABLES
+*"      SITE_OPTIONS STRUCTURE  /EXCEL4AP/SITE_STRUCT
+*"      USERS STRUCTURE  /EXCEL4AP/USER_STRUCT
+*"----------------------------------------------------------------------
+
+
+*{   INSERT         DEVK900059                                        1
+*
+
+* Excel4Apps connector site options and user management - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 1.00
+
+  DATA: WA_SITE_OPTIONS TYPE /EXCEL4AP/SITE_STRUCT,
+        WA_USERS TYPE /EXCEL4AP/USER_STRUCT.
+
+
+  CASE OPERATION.
+
+    WHEN 'MODIFY'.
+
+      "Update the Excel4Apps Site options table
+      LOOP AT SITE_OPTIONS INTO WA_SITE_OPTIONS.
+        MODIFY /EXCEL4AP/SITE FROM WA_SITE_OPTIONS.
+      ENDLOOP.
+
+      "Update the Excel4Apps user table
+      LOOP AT USERS INTO WA_USERS.
+        MODIFY /EXCEL4AP/USERS FROM WA_USERS.
+      ENDLOOP.
+
+    WHEN 'DELETE'.
+
+      "Delete entries from the Excel4Apps Site options table
+      LOOP AT SITE_OPTIONS INTO WA_SITE_OPTIONS.
+        DELETE /EXCEL4AP/SITE FROM WA_SITE_OPTIONS.
+      ENDLOOP.
+
+      "Delete entries from the Excel4Apps user table
+      LOOP AT USERS INTO WA_USERS.
+        DELETE /EXCEL4AP/USERS FROM WA_USERS.
+      ENDLOOP.
+
+  ENDCASE.
+
+  "Clear request tables
+  REFRESH SITE_OPTIONS.
+  REFRESH USERS.
+
+*}   INSERT
+
+
+
+ENDFUNCTION.

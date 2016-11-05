@@ -1,0 +1,102 @@
+FUNCTION BAPI_ACC_PURCHASE_REQUI_POST.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(DOCUMENTHEADER) LIKE  BAPIACHE07 STRUCTURE  BAPIACHE07
+*"       OPTIONAL
+*"     VALUE(SRM_INTERNAL) TYPE  BOOLEAN OPTIONAL
+*"  TABLES
+*"      PURCHASEREQUI STRUCTURE  BAPIACPR00
+*"      PURCHASEAMOUNT STRUCTURE  BAPIACCRPO
+*"      RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+ENHANCEMENT-POINT BAPI_ACC_PURCHASE_REQUI_POS_G8 SPOTS ES_SAPLACC4 STATIC.
+*$*$-Start: BAPI_ACC_PURCHASE_REQUI_POS_G8------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_ACC_PURC001.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_ACC_PURCHASE_REQUI_POS_G8------------------------------------------------------$*$*
+
+ENHANCEMENT-POINT BAPI_ACC_PURCHASE_REQUI_POS_G6 SPOTS ES_SAPLACC4.
+*$*$-Start: BAPI_ACC_PURCHASE_REQUI_POS_G6------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_ACC_PURC001.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050118
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PURCHASEREQUI
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_ACC_PURCHASE_REQUI_POS_G6------------------------------------------------------$*$*
+
+  DATA: LD_TYP    TYPE AWTYP,
+        LD_KEY    TYPE AWKEY,
+        LD_SYS    TYPE AWSYS,
+        LD_ACTUAL_VRGNG LIKE cobk-orgvg.                    "HW1173689
+
+  PERFORM REFRESH_ALL.
+
+  CLEAR DOCUMENTHEADER-COMPO_ACC.                           "note991152.
+
+  if not srm_internal is initial.                          "HW 1084121
+    gd_srm_no_xbapi = srm_internal.                        "HW 1084121
+    gd_skip_obj_type_check = srm_internal.                 "HW 1084121
+  else.                                                    "HW 1084121
+    clear: gd_srm_no_xbapi , gd_skip_obj_type_check .      "HW 1084121
+  endif.                                                   "HW 1084121
+
+  READ TABLE PURCHASEREQUI INDEX 1.
+  IF SY-SUBRC IS INITIAL.
+    LD_TYP = PURCHASEREQUI-OBJ_TYPE.
+    LD_KEY = PURCHASEREQUI-OBJ_KEY.
+    LD_SYS = PURCHASEREQUI-OBJ_SYS.
+  ELSE.
+    PERFORM ERROR_NO_ENTRIES_FOR_ACCIT USING 'PURCHASEREQUI'.
+  ENDIF.
+
+  PERFORM FILL_EKPR
+          TABLES PURCHASEREQUI
+                 PURCHASEAMOUNT.
+
+* Aktueller Vorgang Obligo Verproben/Buchen Banf bei        "HW1173689
+* Nutzung dieses BAPIs                                      "HW1173689
+  LD_ACTUAL_VRGNG = vg_rq.                                  "HW1173689
+  PERFORM CHECK_BANF
+          USING DOCUMENTHEADER-COMPO_ACC
+                LD_ACTUAL_VRGNG.                            "HW1173689
+  PERFORM CHECK_AVC
+          USING  DOCUMENTHEADER-COMPO_ACC.
+
+  PERFORM POST_BANF
+          USING DOCUMENTHEADER-COMPO_ACC.
+
+  PERFORM FILL_RETURN_TABLE
+          TABLES RETURN
+          USING  LD_TYP
+                 LD_KEY
+                 LD_SYS.
+
+ENHANCEMENT-POINT BAPI_ACC_PURCHASE_REQUI_POS_G7 SPOTS ES_SAPLACC4.
+*$*$-Start: BAPI_ACC_PURCHASE_REQUI_POS_G7------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_ACC_PURC001.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PURCHASEREQUI
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_ACC_PURCHASE_REQUI_POS_G7------------------------------------------------------$*$*
+ENDFUNCTION.

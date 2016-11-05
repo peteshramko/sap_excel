@@ -1,0 +1,153 @@
+FUNCTION bapi_bus2054_delete_multi.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_PROJECT_DEFINITION) TYPE
+*"        BAPI_BUS2001_NEW-PROJECT_DEFINITION
+*"  TABLES
+*"      IT_DELETE_WBS_ELEMENT STRUCTURE  BAPI_WBS_LIST
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA:lv_key               TYPE char24,
+       lv_subrc             LIKE sy-subrc,
+       lv_posid             LIKE prps-posid,
+       lv_dialog_status_tmp TYPE flag,
+       lv_msghand_num       LIKE sy-uzeit,
+       lv_msgnum            LIKE sy-uzeit,
+       ls_object            TYPE psguid_ts_guid_for_extern.
+
+* As the WBS element buffer table PSTAB in CJDW is not defined via
+* DDIC, its contents has to be re-build here
+*  DATA BEGIN OF lt_pstab OCCURS 0.
+*          INCLUDE STRUCTURE *prps.     "Satzbett
+*          INCLUDE STRUCTURE pstabd.
+*  DATA END OF lt_pstab.
+  DATA: lt_pstab type table of pstab WITH HEADER LINE,
+        lt_wbs_element TYPE TABLE OF prps WITH HEADER LINE.
+
+* Exception 'message_handler_error' is NOT caught by design
+* to force a dump as we deal with a program error in this case
+  CALL FUNCTION 'PS_BAPI_INITIALIZE'
+       IMPORTING
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       TABLES
+            return          = et_return.
+
+  CALL FUNCTION 'PS_BAPI_PREPARE'
+       EXPORTING
+            i_project_name           = i_project_definition
+            i_method                 = con_wbs_delete
+       IMPORTING
+            e_project_name           = i_project_definition
+       TABLES
+            it_wbs_element_delete    = it_delete_wbs_element
+            extensionin              = extensionin
+            extensionout             = extensionout
+       EXCEPTIONS
+            precommit_already_called = 1
+            init_missing             = 2
+            badi_error               = 4
+            project_read_error       = 5.
+
+  lv_subrc = sy-subrc.
+
+  IF NOT lv_subrc IS INITIAL.
+*   In case of prepare error, keep its messages for ALL objects of
+*   the loop. This is achieved by not resetting the log processing
+*   the first file, i.e. by using SPACE as message handler number
+    CLEAR lv_msgnum.
+  ELSE.
+    lv_msgnum = lv_msghand_num.
+  ENDIF.
+
+  PERFORM cjdw_get_pstab(saplcjdw) TABLES lt_pstab.
+  LOOP AT it_delete_wbs_element INTO lv_posid.
+    CALL FUNCTION 'CONVERSION_EXIT_ABPSN_INPUT'
+         EXPORTING
+              input  = lv_posid
+         IMPORTING
+              output = lt_wbs_element-posid.
+    IF NOT lv_subrc IS INITIAL.
+      APPEND lt_wbs_element.
+    ELSE.
+      READ TABLE lt_pstab WITH KEY posid = lt_wbs_element-posid.
+      IF NOT sy-subrc IS INITIAL.
+        MESSAGE e021(cj) WITH lt_wbs_element-posid INTO null.
+        PERFORM put_sy_message(saplco2o).
+        lv_subrc = 1.
+      ELSE.
+        MOVE-CORRESPONDING lt_pstab TO lt_wbs_element.
+        APPEND lt_wbs_element.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+  SORT lt_wbs_element BY stufe DESCENDING.
+
+  LOOP AT lt_wbs_element.
+    lv_posid = lt_wbs_element-posid.
+
+    IF lv_subrc IS INITIAL.
+      CALL FUNCTION 'CJ2054_DELETE'
+           EXPORTING
+                i_prps               = lt_wbs_element
+           EXCEPTIONS
+                element_not_deleted  = 1.
+    ENDIF.
+
+    IF sy-subrc <> 0 OR lv_subrc <> 0.
+      MESSAGE e011(cnif_pi) WITH text-wbs lv_posid INTO null.
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_error = con_yes.
+    ELSE.
+      MESSAGE s013(cnif_pi) WITH text-wbs lv_posid INTO null.
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_wbs_data = con_yes.
+*     Register object in success buffer table
+      CLEAR ls_object.
+      ls_object-object_type = con_objtype_wbs.
+      ls_object-wbs_element = lv_posid.
+      ls_object-vbkz        = con_wbs_delete.
+      CALL FUNCTION 'PS_BAPI_SUCCESS_BT_APPEND'
+           EXPORTING
+                i_object         = ls_object
+           EXCEPTIONS
+                wrong_parameters = 0.
+    ENDIF.
+
+*   append last message as first message
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+*   sy-msgv2 contains the converted WBS element
+    lv_key = sy-msgv2.
+*   Get remaining messages of current method (stored by 'message ...
+*   into null' AND 'perform put_sy_message(saplco2o)')
+    CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APPEND'
+         EXPORTING
+              objectkey     = lv_key
+              i_msghand_num = lv_msgnum
+         TABLES
+              return        = et_return.
+  ENDLOOP.
+
+* Finish BAPI - call late badi, reset dialog flags
+  CALL FUNCTION 'PS_BAPI_FINISH'
+       EXPORTING
+            i_project_name        = i_project_definition
+            i_dialog_status       = lv_dialog_status_tmp
+            i_msghand_num         = lv_msghand_num
+            i_method              = con_wbs_delete
+            i_subrc               = lv_subrc
+       TABLES
+            it_wbs_element_delete = it_delete_wbs_element
+            return                = et_return
+            extensionin           = extensionin
+            extensionout          = extensionout.
+
+ENDFUNCTION.

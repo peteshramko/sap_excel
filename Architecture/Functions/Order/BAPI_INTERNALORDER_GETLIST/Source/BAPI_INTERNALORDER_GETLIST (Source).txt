@@ -1,0 +1,134 @@
+FUNCTION bapi_internalorder_getlist.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(CONTROLLING_AREA) LIKE  BAPI2075_2-CO_AREA OPTIONAL
+*"     VALUE(RESP_COST_CENTER) LIKE  BAPI2075_2-RESPCCTR OPTIONAL
+*"     VALUE(ORDER_TYPE) LIKE  BAPI2075_2-ORDER_TYPE OPTIONAL
+*"     VALUE(ORDER) LIKE  BAPI2075_2-ORDER OPTIONAL
+*"     VALUE(ORDER_TO) LIKE  BAPI2075_2-ORDER OPTIONAL
+*"     VALUE(ORDER_EXTERNAL_NO) LIKE  BAPI2075_2-EXT_ORD_NO OPTIONAL
+*"     VALUE(ORDER_EXTERNAL_NO_TO) LIKE  BAPI2075_2-EXT_ORD_NO OPTIONAL
+*"  EXPORTING
+*"     VALUE(RETURN) LIKE  BAPIRETURN STRUCTURE  BAPIRETURN
+*"  TABLES
+*"      ORDER_LIST STRUCTURE  BAPI2075_1 OPTIONAL
+*"----------------------------------------------------------------------
+  DATA: x_sy LIKE sy,
+        length_of_list LIKE sy-tabix.
+  DATA: ld_mesg_active(1) TYPE c.                           "note353492
+
+  PERFORM messages_pause CHANGING ld_mesg_active.           "note353492
+
+  REFRESH: i_cosel,
+           order_list.
+
+
+* COSEL mit KOKRS füllen
+  IF ( NOT controlling_area IS INITIAL ).
+    CLEAR i_cosel.
+    i_cosel-field  = 'KOKRS'.
+    i_cosel-low    = controlling_area.
+    i_cosel-sign   = 'I'.
+    i_cosel-option = 'EQ'.
+    APPEND i_cosel.
+  ENDIF.
+
+* COSEL mit KOSTV füllen
+  IF ( NOT resp_cost_center IS INITIAL ).
+    CLEAR i_cosel.
+    i_cosel-field  = 'KOSTV'.
+    i_cosel-low    = resp_cost_center.
+    i_cosel-sign   = 'I'.
+    i_cosel-option = 'EQ'.
+    APPEND i_cosel.
+  ENDIF.
+
+* COSEL mit AUART füllen
+  IF ( NOT order_type IS INITIAL ).
+    CLEAR i_cosel.
+    i_cosel-field  = 'AUART'.
+    i_cosel-low    = order_type.
+    i_cosel-sign   = 'I'.
+    i_cosel-option = 'EQ'.
+    APPEND i_cosel.
+  ENDIF.
+
+* COSEL mit AUFEX füllen
+  IF ( NOT order_external_no IS INITIAL ) OR
+     ( NOT order_external_no_to IS INITIAL ).
+    SET EXTENDED CHECK OFF.
+    IF ( order_external_no_to < order_external_no  AND
+         NOT order_external_no_to IS INITIAL ).               "Hw434735
+      SET EXTENDED CHECK ON.
+      CLEAR x_sy.                                           "P30K125184
+      x_sy-msgid = 'DB'.                                    "P30K125184
+      x_sy-msgno = '650'.                                   "P30K125184
+      x_sy-msgty = 'E'.                                     "P30K125184
+      PERFORM pass_on_messages USING return x_sy.           "P30K125184
+      PERFORM messages_continue USING ld_mesg_active.       "note353492
+      EXIT.                                                 "P30K125184
+    ENDIF.
+    CLEAR i_cosel.
+    i_cosel-field = 'AUFEX'.
+    IF ( NOT order_external_no IS INITIAL ).
+      i_cosel-low  = order_external_no.
+      i_cosel-sign   = 'I'.
+      i_cosel-option = 'EQ'.
+      IF ( NOT order_external_no_to IS INITIAL ).
+        i_cosel-high   = order_external_no_to.
+        i_cosel-option = 'BT'.
+      ENDIF.
+    ELSE.                          "<=> not order_external_no is initial
+      i_cosel-sign   = 'I'.
+      i_cosel-low  = order_external_no_to.
+      i_cosel-option = 'LE'.           "alle AUFEX < .._TO     "Hw434735
+    ENDIF.
+    APPEND i_cosel.
+  ENDIF.
+
+* COSEL mit AUFNR füllen
+  IF ( NOT order IS INITIAL ) OR
+     ( NOT order_to IS INITIAL ).
+    SET EXTENDED CHECK OFF.
+    IF ( order_to < order AND NOT order_to IS INITIAL ).      "Hw434735
+      SET EXTENDED CHECK ON.
+      CLEAR x_sy.                                           "P30K125184
+      x_sy-msgid = 'DB'.                                    "P30K125184
+      x_sy-msgno = '650'.                                   "P30K125184
+      x_sy-msgty = 'E'.                                     "P30K125184
+      PERFORM pass_on_messages USING return x_sy.           "P30K125184
+      PERFORM messages_continue USING ld_mesg_active.       "note353492
+      EXIT.                                                 "P30K125184
+    ENDIF.
+    CLEAR i_cosel.
+    i_cosel-field    = 'AUFNR'.
+    IF ( NOT order IS INITIAL ).
+      i_cosel-low  = order.
+      i_cosel-sign   = 'I'.
+      i_cosel-option = 'EQ'.
+      IF ( NOT order_to IS INITIAL ).
+        i_cosel-high   = order_to.
+        i_cosel-option = 'BT'.
+      ENDIF.
+    ELSE.                              " <=>  not order_to is initial
+      i_cosel-sign   = 'I'.
+      i_cosel-low  = order_to.
+      i_cosel-option = 'LE'.           "alle AUFNR < .._TO     "Hw434735
+    ENDIF.
+    APPEND i_cosel.
+  ENDIF.
+
+* Selektion anstoßen
+  PERFORM get_order_list
+              TABLES
+                 i_cosel
+                 order_list
+              USING
+                 length_of_list
+                 'BUS2075'
+                 return.                                    "P30K125184
+
+  PERFORM messages_continue USING ld_mesg_active.           "note353492
+
+ENDFUNCTION.

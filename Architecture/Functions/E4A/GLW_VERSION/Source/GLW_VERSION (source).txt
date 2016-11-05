@@ -1,0 +1,34 @@
+FUNCTION /EXCEL4AP/GLW_VERSION.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  EXPORTING
+*"     VALUE(VERSION) TYPE  STRING
+*"----------------------------------------------------------------------
+
+*{   INSERT         DEVK900059                                        1
+*
+* Excel4Apps GL Wand version - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 3.0
+* 3.1 Added GLW Get Data 1
+* 4.0 Added Reports Wand
+* 4.06 Added customer/vendor, projects enhancements
+* 4.13 Added projects changes for performance
+*      Line items drill down user confirm changed type
+* 4.20 Server authorization enhancement
+* 4.21 Syncing version
+* 4.27 COPA support
+* 4.29 COPA performance alternative
+* 4.33 Daily function
+* 4.34 COPA plan balance
+* 4.35 Auto split
+* 4.40 New web version
+
+VERSION = '4.40'.
+
+*}   INSERT
+
+
+
+
+ENDFUNCTION.

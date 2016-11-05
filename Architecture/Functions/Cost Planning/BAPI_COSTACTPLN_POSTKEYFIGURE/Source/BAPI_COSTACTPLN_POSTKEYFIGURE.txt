@@ -1,0 +1,27 @@
+FUNCTION bapi_costactpln_postkeyfigure.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(HEADERINFO) LIKE  BAPIPLNHDR_SKF STRUCTURE  BAPIPLNHDR_SKF
+*"     VALUE(DELTA) LIKE  BAPI6031_CTRLDATA-DELTA DEFAULT SPACE
+*"  TABLES
+*"      INDEXSTRUCTURE STRUCTURE  BAPIACISTRU
+*"      COOBJECT STRUCTURE  BAPISKFOBJ
+*"      PERVALUE STRUCTURE  BAPISKFVAL OPTIONAL
+*"      TOTVALUE STRUCTURE  BAPISKFTOT OPTIONAL
+*"      RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+
+  CALL FUNCTION 'BAPI_KEY_FIGURE_CHECK_AND_POST'
+       EXPORTING
+            header_info   = headerinfo
+            testrun       = ' '
+            delta         = delta
+       TABLES
+            idx_structure = indexstructure
+            object        = coobject
+            per_value     = pervalue
+            tot_value     = totvalue
+            return        = return.
+
+ENDFUNCTION.

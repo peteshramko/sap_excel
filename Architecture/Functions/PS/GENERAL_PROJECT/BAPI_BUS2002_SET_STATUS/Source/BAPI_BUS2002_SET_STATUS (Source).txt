@@ -1,0 +1,888 @@
+FUNCTION bapi_bus2002_set_status .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(NUMBER) LIKE  BAPI_NETWORK_LIST-NETWORK
+*"     VALUE(UNDO_SYSTEM_STATUS)
+*"  LIKE  BAPI_SYSTEM_STATUS-SYSTEM_STATUS OPTIONAL
+*"     VALUE(UNDO_USER_STATUS) LIKE  BAPI_USER_STATUS-USER_STATUS
+*"         OPTIONAL
+*"     VALUE(SET_SYSTEM_STATUS) LIKE  BAPI_SYSTEM_STATUS-SYSTEM_STATUS
+*"         OPTIONAL
+*"     VALUE(SET_USER_STATUS) LIKE  BAPI_USER_STATUS-USER_STATUS
+*"         OPTIONAL
+*"  EXPORTING
+*"     VALUE(RETURN) TYPE  BAPIRETURN1
+*"  TABLES
+*"      I_ACTIVITY_SYSTEM_STATUS STRUCTURE  BAPI_ACT_MNT_SYSTEM_STATUS
+*"         OPTIONAL
+*"      I_ACTIVITY_USER_STATUS STRUCTURE  BAPI_ACT_MNT_USER_STATUS
+*"         OPTIONAL
+*"      E_RESULT STRUCTURE  BAPI_STATUS_RESULT OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: l_check_ok  TYPE boole_d,
+        l_par1      LIKE sy-msgv1,
+        l_par2      LIKE sy-msgv1,
+        l_sop       type c,
+        l_objectkey type BAPI_STATUS_RESULT-objectkey,
+        l_netzkont  like caufvd-netzkont.
+  DATA: LOG_LEVEL    LIKE METHOD_LOG-LOGLEVEL,
+        SUCC_CODE    LIKE METHOD_LOG-SUCC_CODE.
+  data: l_caufvd    like caufvd.
+  data: l_afvgd     like afvgd.
+  data: l_SET_system_STATUS_orig like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_undo_system_STATUS_orig like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_set_user_STATUS_orig like BAPI_user_STATUS-user_STATUS,
+        l_undo_user_STATUS_orig like BAPI_user_STATUS-user_STATUS,
+        l_SET_system_STATUS_disc like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_undo_system_STATUS_disc like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_SET_user_STATUS_disc like BAPI_USER_STATUS-USER_STATUS,
+        l_undo_user_STATUS_disc like BAPI_USER_STATUS-USER_STATUS.
+  DATA: lt_system_status_orig like BAPI_ACT_MNT_SYSTEM_STATUS
+        occurs 0 with header line.
+  DATA: lt_system_status_disc like BAPI_ACT_MNT_SYSTEM_STATUS
+        occurs 0 with header line.
+  DATA: lt_user_status_orig like BAPI_ACT_MNT_USER_STATUS
+        occurs 0 with header line.
+  DATA: lt_user_status_disc like BAPI_ACT_MNT_USER_STATUS
+        occurs 0 with header line.
+  DATA: lt_system_status_disc_s like BAPI_ACT_MNT_SYSTEM_STATUS
+        occurs 0 with header line.
+  DATA: lt_user_status_disc_s like BAPI_ACT_MNT_USER_STATUS
+        occurs 0 with header line.
+  DATA: lt_system_status_disc_u like BAPI_ACT_MNT_SYSTEM_STATUS
+        occurs 0 with header line.
+  DATA: lt_user_status_disc_u like BAPI_ACT_MNT_USER_STATUS
+        occurs 0 with header line.
+
+  data: lv_dialog_status type flag.                      " Note 929127
+
+* ^_NOTE_929127
+* Get the dialog status before the BAPI call.
+  CALL FUNCTION 'DIALOG_GET_STATUS'
+    IMPORTING
+      DIALOG_STATUS       = lv_dialog_status.
+* v_NOTE_929127
+
+* save structure
+  lt_system_status_orig[] = i_activity_system_status[].
+  lt_user_status_orig[] = i_activity_user_status[].
+  l_SET_system_STATUS_orig = set_system_status.
+  l_undo_system_STATUS_orig = undo_system_status.
+  l_SET_user_STATUS_orig = set_user_status.
+  l_undo_user_STATUS_orig = undo_user_status.
+
+* initialization
+  perform cnif_init using    space
+                    changing l_check_ok.
+  IF l_check_ok = false.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '005'
+      IMPORTING
+        bapireturn = return.
+    move number to l_objectkey.
+    perFORM cnif_read_log TABLES
+                           e_result
+                           using
+                           l_objectkey
+                           space
+                           space.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+*   All-or-nothing principle: call chk_precommit in all cases
+    CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_929127
+*   Reset dialog flags
+    PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_929127
+    EXIT.
+  ENDIF.
+*-----------------------------------------------------------------------
+* read and lock network
+  perform cnif_read_lock_network using  'X'
+                                        number
+                                 changing
+                                        l_caufvd
+                                        l_check_ok.
+  IF l_check_ok = false.
+    l_par1 = number.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '004'
+        par1       = l_par1
+      IMPORTING
+        bapireturn = return.
+    move number to l_objectkey.
+    perFORM cnif_read_log TABLES
+                           e_result
+                           using
+                           l_objectkey
+                           space
+                           space.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+*   All-or-nothing principle: call chk_precommit in all cases
+    CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_929127
+*   Reset dialog flags
+    PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_929127
+    EXIT.
+  ENDIF.
+
+* check existence and uniqueness of activities
+  perform cnif_check_activity
+               tables
+                   i_activity_system_status
+                   i_activity_user_status
+                   e_result
+               using
+                   number
+               changing
+                   l_check_ok.
+
+  IF l_check_ok = false.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '005'
+      IMPORTING
+        bapireturn = return.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+*   All-or-nothing principle: call chk_precommit in all cases
+    CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_929127
+*   Reset dialog flags
+    PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_929127
+    EXIT.
+  ENDIF.
+
+* discard np (unset)
+  perform cnif_status_np_discard
+              using
+                 l_caufvd-objnr
+                 c_U
+              changing
+                 undo_system_status
+                 undo_user_status.
+
+  l_undo_system_STATUS_disc = undo_system_status.
+  l_undo_user_STATUS_disc = undo_user_status.
+
+* check, if input is correct np (unset)
+  if not undo_system_status is initial.
+    PERFORM cnif_system_status_np_check
+                USING undo_system_status
+                      c_U
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = C_check
+          OBJ_TYP    = CO1_TYPE-network
+          OBJ_ID_EXT = number
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E001(CNIF_STATUS)
+              WITH undo_SYSTEM_STATUS
+                   number
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_System
+                             c_U.
+      clear undo_system_status.
+    ENDIF.
+  endif.
+
+  if not undo_user_status is initial.
+    PERFORM cnif_user_status_np_check
+                USING  l_caufvd-objnr
+                       undo_user_status
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = C_check
+          OBJ_TYP    = CO1_TYPE-network
+          OBJ_ID_EXT = number
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E001(CNIF_STATUS)
+              WITH undo_user_STATUS
+                   number
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_User
+                             c_U.
+      clear undo_user_status.
+    ENDIF.
+  endif.
+
+* execute np (unset)
+  if not undo_system_status is initial.
+    perform cnif_status_np_set using l_caufvd
+                                       undo_system_status
+                                       space                              "nt_1259614
+                                       c_U
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_System
+                             c_U.
+      clear undo_system_status.
+    ENDIF.
+  endif.
+
+* undo user status np
+  if not undo_user_status is initial.
+    perform cnif_status_np_set using l_caufvd
+                                       space                              "nt_1259614
+                                       undo_user_status
+                                       c_U
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_User
+                             c_U.
+      clear undo_user_status.
+    ENDIF.
+  endif.
+
+* discard np (set)
+  perform cnif_status_np_discard
+              using
+                 l_caufvd-objnr
+                 c_S
+              changing
+                 set_system_status
+                 set_user_status.
+
+  l_set_system_STATUS_disc = set_system_status.
+  l_set_user_STATUS_disc = set_user_status.
+
+* check, if input is correct np (set)
+  if not set_system_status is initial.
+    PERFORM cnif_system_status_np_check
+                USING set_system_status
+                      c_S
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = C_check
+          OBJ_TYP    = CO1_TYPE-network
+          OBJ_ID_EXT = number
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E000(CNIF_STATUS)
+              WITH set_SYSTEM_STATUS
+                   number
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_System
+                             c_S.
+      clear set_system_status.
+    ENDIF.
+  endif.
+
+  if not set_user_status is initial.
+    PERFORM cnif_user_status_np_check
+                USING l_caufvd-objnr
+                      set_user_status
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = C_check
+          OBJ_TYP    = CO1_TYPE-network
+          OBJ_ID_EXT = number
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E000(CNIF_STATUS)
+              WITH set_user_STATUS
+                   number
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_User
+                             c_S.
+      clear set_user_status.
+    ENDIF.
+  endif.
+
+* execute np (set)
+  if not set_system_status is initial.
+    perform cnif_status_np_set using l_caufvd
+                                       set_system_status
+                                       space                              "nt_1259614
+                                       c_S
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_System
+                             c_S.
+      clear set_system_status.
+    ENDIF.
+  endif.
+
+* set user status np
+  if not set_user_status is initial.
+    perform cnif_status_np_set using l_caufvd
+                                       space                              "nt_1259614
+                                       set_user_status
+                                       c_S
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      move number to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_User
+                             c_S.
+      clear set_user_status.
+    ENDIF.
+  endif.
+
+* discard nv (unset)
+  perform cnif_status_nv_discard
+              tables
+                 I_ACTIVITY_SYSTEM_STATUS
+                 I_ACTIVITY_USER_STATUS
+              using
+                 l_caufvd-aufnr
+                 c_U.
+
+  lt_system_status_disc_u[] = i_activity_system_status[].
+  lt_user_status_disc_u[] = i_activity_user_status[].
+
+* determine accounting type
+  if not l_caufvd-netzkont is initial.
+    l_netzkont = l_caufvd-netzkont.
+  else.
+    CALL FUNCTION 'STATUS_CHECK'
+      EXPORTING
+        OBJNR             = l_caufvd-objnr
+        STATUS            = 'I0053'
+      EXCEPTIONS
+        OBJECT_NOT_FOUND  = 1
+        STATUS_NOT_ACTIVE = 2
+        OTHERS            = 3.
+    if sy-subrc eq 2.
+      l_netzkont = '1'.
+    else.
+      l_netzkont = '2'.
+    endif.
+  endif.
+* check, if input is correct (undo)
+  loop at I_ACTIVITY_SYSTEM_STATUS.
+    if not I_ACTIVITY_SYSTEM_STATUS-undo_system_status is initial.
+      clear l_sop.
+      CALL FUNCTION 'CO_BT_AFVG_READ_WITH_LOGKEY'
+        EXPORTING
+          APLFL     = '000000'
+          AUFNR_ACT = l_caufvd-aufnr
+          FLG_WORK  = 'X'
+          ALSO_SOP  = 'X'
+          VORNR     = I_ACTIVITY_SYSTEM_STATUS-activity
+        IMPORTING
+          AFVGD_EXP = l_AFVGD
+        EXCEPTIONS
+          NOT_FOUND = 1
+          OTHERS    = 2.
+      if not l_afvgd-sumnr is initial.
+        l_sop = c_X.
+      endif.
+      PERFORM cnif_system_status_nv_check
+                  USING I_ACTIVITY_SYSTEM_STATUS-undo_system_status
+                        l_sop
+                        c_U
+                        l_netzkont
+                  CHANGING
+                        l_check_ok.
+      IF l_check_ok = false.
+        concatenate number I_ACTIVITY_SYSTEM_STATUS-activity
+                    into l_par1 separated by '/' .
+        concatenate number I_ACTIVITY_SYSTEM_STATUS-activity
+                    into l_objectkey.
+        CALL FUNCTION 'METHOD_START_LOG'
+          EXPORTING
+            METHOD     = c_check
+            OBJ_TYP    = CO1_TYPE-network_activity
+            OBJ_ID_EXT = I_ACTIVITY_SYSTEM_STATUS-activity
+          IMPORTING
+            LOG_LEVEL  = LOG_LEVEL.
+        message E001(CNIF_STATUS)
+                WITH I_ACTIVITY_SYSTEM_STATUS-UNDO_SYSTEM_STATUS
+                     l_par1
+                     INTO NULL.
+        perform cnif_put_sy_message.
+        CALL FUNCTION 'METHOD_FINISH_LOG'
+          EXPORTING
+            LOG_LEVEL = LOG_LEVEL
+            SUCC_CODE = SUCC_CODE.
+        perFORM cnif_read_log TABLES
+                               e_result
+                              using
+                               l_objectkey
+                               c_System
+                               c_U.
+        clear i_activity_system_status-undo_system_status.
+        modify i_activity_system_status.
+      ENDIF.
+    endif.
+  endloop.
+
+  loop at I_ACTIVITY_user_STATUS.
+    if not I_ACTIVITY_user_STATUS-undo_user_status is initial.
+      PERFORM cnif_user_status_nv_check
+                  USING
+                     number
+                     I_ACTIVITY_user_STATUS-activity
+                     I_ACTIVITY_user_STATUS-undo_user_status
+                  CHANGING
+                      l_check_ok.
+      IF l_check_ok = false.
+        concatenate number I_ACTIVITY_user_STATUS-activity
+                    into l_par1 separated by '/' .
+        concatenate number I_ACTIVITY_user_STATUS-activity
+                    into l_objectkey.
+        CALL FUNCTION 'METHOD_START_LOG'
+          EXPORTING
+            METHOD     = c_check
+            OBJ_TYP    = CO1_TYPE-network_activity
+            OBJ_ID_EXT = I_ACTIVITY_user_STATUS-activity
+          IMPORTING
+            LOG_LEVEL  = LOG_LEVEL.
+        message E001(CNIF_STATUS)
+                WITH I_ACTIVITY_user_STATUS-UNDO_user_STATUS
+                     l_par1
+                     INTO NULL.
+        perform cnif_put_sy_message.
+        CALL FUNCTION 'METHOD_FINISH_LOG'
+          EXPORTING
+            LOG_LEVEL = LOG_LEVEL
+            SUCC_CODE = SUCC_CODE.
+        perFORM cnif_read_log TABLES
+                               e_result
+                              using
+                               l_objectkey
+                               c_User
+                               c_U.
+        clear i_activity_user_status-undo_user_status.
+        modify i_activity_user_status.
+      ENDIF.
+    endif.
+  endloop.
+
+* execute nv (undo)
+  loop at i_activity_system_status.
+    if not i_activity_system_status-undo_system_status is initial.
+      concatenate number i_activity_system_status-activity
+                  into l_objectkey.
+* reset system-status
+      perform cnif_status_nv_set
+                        using
+                            number
+                            i_activity_system_status-activity
+                            i_activity_system_status-undo_system_status
+                            space                                            "nt_1259614
+                            c_U
+                        changing
+                            l_check_ok.
+      IF l_check_ok = false.
+        perFORM cnif_read_log TABLES
+                                e_result
+                              using
+                                l_objectkey
+                                c_System
+                                c_U.
+        clear i_activity_system_status-undo_system_status.
+        modify i_activity_system_status.
+      endif.
+    endif.
+  endloop.
+
+  loop at i_activity_user_status.
+    if not i_activity_user_status-undo_user_status is initial.
+      concatenate number i_activity_system_status-activity
+                  into l_objectkey.
+* reset user-status
+      perform cnif_status_nv_set
+                        using
+                            number
+                            i_activity_user_status-activity
+                            space                                            "nt_1259614
+                            i_activity_user_status-undo_user_status
+                            c_U
+                        changing
+                            l_check_ok.
+      IF l_check_ok = false.
+        perFORM cnif_read_log TABLES
+                                e_result
+                              using
+                                l_objectkey
+                                c_User
+                                c_U.
+        clear i_activity_user_status-undo_user_status.
+        modify i_activity_user_status.
+      ENDIF.
+    endif.
+  endloop.
+
+* discard nv (set)
+  perform cnif_status_nv_discard
+              tables
+                 I_ACTIVITY_SYSTEM_STATUS
+                 I_ACTIVITY_USER_STATUS
+              using
+                 l_caufvd-aufnr
+                 c_S.
+
+  lt_system_status_disc_s[] = i_activity_system_status[].
+  lt_user_status_disc_s[] = i_activity_user_status[].
+
+* check, if input is correct (set)
+  loop at i_activity_system_status.
+    if not I_ACTIVITY_SYSTEM_STATUS-set_system_status is initial.
+      clear l_sop.
+      CALL FUNCTION 'CO_BT_AFVG_READ_WITH_LOGKEY'
+        EXPORTING
+          APLFL     = '000000'
+          AUFNR_ACT = l_caufvd-aufnr
+          FLG_WORK  = 'X'
+          ALSO_SOP  = 'X'
+          VORNR     = I_ACTIVITY_SYSTEM_STATUS-activity
+        IMPORTING
+          AFVGD_EXP = l_AFVGD
+        EXCEPTIONS
+          NOT_FOUND = 1
+          OTHERS    = 2.
+      if not l_afvgd-sumnr is initial.
+        l_sop = c_X.
+      endif.
+      PERFORM cnif_system_status_nv_check
+                  USING I_ACTIVITY_SYSTEM_STATUS-set_system_status
+                        l_sop
+                        c_S
+                        l_netzkont
+                  CHANGING
+                        l_check_ok.
+      IF l_check_ok = false.
+        concatenate number I_ACTIVITY_SYSTEM_STATUS-activity
+                    into l_par1 separated by '/'.
+        concatenate number I_ACTIVITY_SYSTEM_STATUS-activity
+                    into l_objectkey.
+        CALL FUNCTION 'METHOD_START_LOG'
+          EXPORTING
+            METHOD     = c_check
+            OBJ_TYP    = CO1_TYPE-network_activity
+            OBJ_ID_EXT = I_ACTIVITY_system_STATUS-activity
+          IMPORTING
+            LOG_LEVEL  = LOG_LEVEL.
+        message E000(CNIF_STATUS)
+                WITH I_ACTIVITY_SYSTEM_STATUS-SET_SYSTEM_STATUS
+                     l_par1
+                     INTO NULL.
+        perform cnif_put_sy_message.
+        CALL FUNCTION 'METHOD_FINISH_LOG'
+          EXPORTING
+            LOG_LEVEL = LOG_LEVEL
+            SUCC_CODE = SUCC_CODE.
+        perFORM cnif_read_log TABLES
+                               e_result
+                              using
+                               l_objectkey
+                               c_System
+                               c_S.
+        clear i_activity_system_status-set_system_status.
+        modify i_activity_system_status.
+      ENDIF.
+    endif.
+  endloop.
+
+  loop at I_ACTIVITY_user_STATUS.
+    if not I_ACTIVITY_user_STATUS-set_user_status is initial.
+      PERFORM cnif_user_status_nv_check
+                  USING
+                     number
+                     I_ACTIVITY_user_STATUS-activity
+                     I_ACTIVITY_user_STATUS-set_user_status
+                  CHANGING
+                      l_check_ok.
+      IF l_check_ok = false.
+        concatenate number I_ACTIVITY_user_STATUS-activity
+                    into l_par1 separated by '/' .
+        concatenate number I_ACTIVITY_user_STATUS-activity
+                    into l_objectkey.
+        CALL FUNCTION 'METHOD_START_LOG'
+          EXPORTING
+            METHOD     = c_check
+            OBJ_TYP    = CO1_TYPE-network_activity
+            OBJ_ID_EXT = I_ACTIVITY_user_STATUS-activity
+          IMPORTING
+            LOG_LEVEL  = LOG_LEVEL.
+        message E000(CNIF_STATUS)
+                WITH I_ACTIVITY_user_STATUS-set_user_STATUS
+                     l_par1
+                     INTO NULL.
+        perform cnif_put_sy_message.
+        CALL FUNCTION 'METHOD_FINISH_LOG'
+          EXPORTING
+            LOG_LEVEL = LOG_LEVEL
+            SUCC_CODE = SUCC_CODE.
+        perFORM cnif_read_log TABLES
+                               e_result
+                              using
+                               l_objectkey
+                               c_User
+                               c_S.
+        clear i_activity_user_status-set_user_status.
+        modify i_activity_user_status.
+      ENDIF.
+    endif.
+  endloop.
+
+* execute nv (set)
+  loop at i_activity_system_status.
+    if not i_activity_system_status-set_system_status is initial.
+      concatenate number i_activity_system_status-activity
+                  into l_objectkey.
+* set system-status
+      perform cnif_status_nv_set
+                        using
+                            number
+                            i_activity_system_status-activity
+                            i_activity_system_status-set_system_status
+                            space                                            "nt_1259614
+                            c_S
+                        changing
+                            l_check_ok.
+      IF l_check_ok = false.
+        perFORM cnif_read_log TABLES
+                                e_result
+                              using
+                                l_objectkey
+                                c_System
+                                c_S.
+        clear i_activity_system_status-set_system_status.
+        modify i_activity_system_status.
+      ENDIF.
+    endif.
+  endloop.
+
+  loop at i_activity_user_status.
+    if not i_activity_user_status-set_user_status is initial.
+      concatenate number i_activity_user_status-activity
+                  into l_objectkey.
+* set user-status
+      perform cnif_status_nv_set
+                        using
+                            number
+                            i_activity_user_status-activity
+                            space                                            "nt_1259614
+                            i_activity_user_status-set_user_status
+                            'S'
+                        changing
+                            l_check_ok.
+      IF l_check_ok = false.
+        perFORM cnif_read_log TABLES
+                                e_result
+                              using
+                                l_objectkey
+                                c_User
+                                c_S.
+        clear i_activity_user_status-set_user_status.
+        modify i_activity_user_status.
+      ENDIF.
+    endif.
+  endloop.
+
+
+* determine return
+  loop at i_activity_system_status.
+    if i_activity_system_status-set_system_status is initial and
+       i_activity_system_status-undo_system_status is initial.
+      delete i_activity_system_status.
+    endif.
+  endloop.
+  loop at i_activity_user_status.
+    if i_activity_user_status-set_user_status is initial and
+       i_activity_user_status-undo_user_status is initial.
+      delete i_activity_user_status.
+    endif.
+  endloop.
+  loop at lt_system_status_disc_u.
+    clear lt_system_status_disc.
+    read table lt_system_status_disc_s index sy-tabix.
+    if not lt_system_status_disc_u-undo_system_status is initial or
+       not lt_system_status_disc_s-set_system_status  is initial.
+      lt_system_status_disc-activity =
+      lt_system_status_disc_u-activity.
+      lt_system_status_disc-set_system_status =
+      lt_system_status_disc_s-set_system_status.
+      lt_system_status_disc-undo_system_status =
+      lt_system_status_disc_u-undo_system_status.
+      append lt_system_status_disc.
+    endif.
+  endloop.
+  loop at lt_user_status_disc_u.
+    clear lt_user_status_disc.
+    read table lt_user_status_disc_s index sy-tabix.
+    if not lt_user_status_disc_u-undo_user_status is initial or
+       not lt_user_status_disc_s-set_user_status  is initial.
+      lt_user_status_disc-activity =
+      lt_user_status_disc_u-activity.
+      lt_user_status_disc-set_user_status =
+      lt_user_status_disc_s-set_user_status.
+      lt_user_status_disc-undo_user_status =
+      lt_user_status_disc_u-undo_user_status.
+      append lt_user_status_disc.
+    endif.
+  endloop.
+
+* determine return
+  if lt_system_status_orig[]   = lt_system_status_disc[]  and
+     lt_user_status_orig[]     = lt_user_status_disc[]  and
+     l_set_system_status_orig  = l_set_system_status_disc and
+     l_undo_system_status_orig = l_undo_system_status_disc and
+     l_set_user_status_orig    = l_set_user_status_disc and
+     l_undo_user_status_orig   = l_undo_user_status_disc.
+    if i_activity_system_status[] is initial and
+       i_activity_user_status[]   is initial and
+       set_system_status          is initial and
+       undo_system_status         is initial and
+       set_user_status            is initial and
+       undo_user_status           is initial.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+        EXPORTING
+          type       = 'E'
+          cl         = 'CNIF_STATUS'
+          number     = '005'
+        IMPORTING
+          bapireturn = return.
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_error = con_yes.
+*     All-or-nothing principle: call chk_precommit in all cases
+      CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_929127
+*     Reset dialog flags
+      PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_929127
+      exit.
+    elseif i_activity_system_status[] ne lt_system_status_orig[]   or
+           i_activity_user_status[]   ne lt_user_status_orig[]     or
+           set_system_status          ne l_set_system_status_orig  or
+           undo_system_status         ne l_undo_system_status_orig or
+           set_user_status            ne l_set_user_status_orig    or
+           undo_user_status           ne l_undo_user_status_orig.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+        EXPORTING
+          type       = 'E'
+          cl         = 'CNIF_STATUS'
+          number     = '006'
+        IMPORTING
+          bapireturn = return.
+    endif.
+  else.
+    if i_activity_system_status[] ne lt_system_status_disc[]   or
+       i_activity_user_status[]   ne lt_user_status_disc[]     or
+       set_system_status          ne l_set_system_status_disc  or
+       undo_system_status         ne l_undo_system_status_disc or
+       set_user_status            ne l_set_user_status_disc    or
+       undo_user_status           ne l_undo_user_status_disc.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+        EXPORTING
+          type       = 'E'
+          cl         = 'CNIF_STATUS'
+          number     = '006'
+        IMPORTING
+          bapireturn = return.
+    endif.
+  endif.
+
+  if return is initial.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              I_NETWORK_DATA = con_yes.
+  else.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+  endif.
+* All-or-nothing principle: call chk_precommit in all cases
+  CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_929127
+* Reset dialog flags
+  PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_929127
+
+ENDFUNCTION.

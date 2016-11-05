@@ -1,0 +1,30 @@
+﻿  
+  Microsoft (R) Program Maintenance Utility Version 14.00.24210.0
+  Copyright (C) Microsoft Corporation.  All rights reserved.
+  
+  	del /f /q ..\..\lib\"frmwrk32.lib" 1>nul 2>nul
+  	del /f /q ..\..\include\FRAMEWRK.H 1>nul 2>nul
+  	del /f /q ""..\..\lib\FRAMEWRK.pdb"" 1>nul 2>nul
+  	del /f /q ".\DEBUG\*.*"
+  D:\iiiwave\2013 Office System Developer Resources\Excel2013XLLSDK\SAMPLES\FRAMEWRK\DEBUG\Framework.log
+  The process cannot access the file because it is being used by another process.
+  	rd /S /Q .\DEBUG 1>nul 2>nul
+  
+  Microsoft (R) Program Maintenance Utility Version 14.00.24210.0
+  Copyright (C) Microsoft Corporation.  All rights reserved.
+  
+  	cl /nologo /Od /W3 /WX /EHsc /Zi /MDd /Fd".\DEBUG\FRAMEWRK.pdb" /Fo".\DEBUG\\" /I. /I"..\..\include" /I"..\..\src" /I"\VC\PlatformSDK\Include" /I"\VC\include" /D"WIN32" /D"_WINDOWS" /D"_MBCS" /D"_USRDLL" /D"FRAMEWORK_EXPORTS" /D"_DEBUG" /c MemoryManager.cpp
+  MemoryManager.cpp
+  	cl /nologo /Od /W3 /WX /EHsc /Zi /MDd /Fd".\DEBUG\FRAMEWRK.pdb" /Fo".\DEBUG\\" /I. /I"..\..\include" /I"..\..\src" /I"\VC\PlatformSDK\Include" /I"\VC\include" /D"WIN32" /D"_WINDOWS" /D"_MBCS" /D"_USRDLL" /D"FRAMEWORK_EXPORTS" /D"_DEBUG" /c MemoryPool.cpp
+  MemoryPool.cpp
+  	cl /nologo /Od /W3 /WX /EHsc /Zi /MDd /Fd".\DEBUG\FRAMEWRK.pdb" /Fo".\DEBUG\\" /I. /I"..\..\include" /I"..\..\src" /I"\VC\PlatformSDK\Include" /I"\VC\include" /D"WIN32" /D"_WINDOWS" /D"_MBCS" /D"_USRDLL" /D"FRAMEWORK_EXPORTS" /D"_DEBUG" /c FRAMEWRK.c
+  FRAMEWRK.c
+  	cd .\DEBUG
+  	lib.exe /nologo MemoryManager.obj  MemoryPool.obj  FRAMEWRK.obj /OUT:"frmwrk32.lib" /nodefaultlib
+  	cd .\..
+  	copy /Y .\DEBUG\"frmwrk32.lib" ..\..\lib
+          1 file(s) copied.
+  	copy /Y .\DEBUG\FRAMEWRK.pdb "..\..\lib"
+          1 file(s) copied.
+  	copy /Y ".\FRAMEWRK.H" "..\..\include\FRAMEWRK.H"
+          1 file(s) copied.

@@ -1,0 +1,288 @@
+FUNCTION bapi_requisition_change.                           "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(NUMBER) LIKE  BAPIEBAN-PREQ_NO
+*"  TABLES
+*"      REQUISITION_ITEMS_OLD STRUCTURE  BAPIEBANV
+*"      REQUISITION_ITEMS_NEW STRUCTURE  BAPIEBANV
+*"      REQUISITION_ACCOUNT_OLD STRUCTURE  BAPIEBKNV OPTIONAL
+*"      REQUISITION_ACCOUNT_NEW STRUCTURE  BAPIEBKNV OPTIONAL
+*"      REQUISITION_TEXT_OLD STRUCTURE  BAPIEBANTX OPTIONAL
+*"      REQUISITION_TEXT_NEW STRUCTURE  BAPIEBANTX OPTIONAL
+*"      RETURN STRUCTURE  BAPIRETURN OPTIONAL
+*"----------------------------------------------------------------------
+* test data generator
+  fbgenmac 'BAPI_REQUISITION_CHANGE'."#EC CI_ROLLBACK "#EC NEEDED "#EC *
+
+* define local data
+  DATA: l_lines TYPE sy-tabix.
+
+* reset all internal structures and tables
+  CLEAR: return, xebkn, tebkn, xeban, exitflag, h_lines.
+  REFRESH: return, xebkn, tebkn, xeban.
+  CLEAR transaction_id.
+
+  SORT requisition_items_old BY preq_item.
+  SORT requisition_items_new BY preq_item.
+  SORT requisition_account_old BY preq_item serial_no.
+  SORT requisition_account_new BY preq_item serial_no.
+
+* get transaction ID for IDOC-creation
+  macro_start.
+
+* enqueue the requisition
+  CALL FUNCTION 'ENQUEUE_EMEBANE'
+    EXPORTING
+      banfn  = number
+    EXCEPTIONS
+      OTHERS = 1.
+
+  IF sy-subrc NE 0.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '102'
+                                   number
+                                   space
+                                   space
+                                   space.
+    macro_abort. EXIT.
+  ENDIF.
+
+* select the requisition items from database
+  DESCRIBE TABLE requisition_items_old LINES l_lines.
+  IF l_lines IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '153'
+                                   space
+                                   space
+                                   space
+                                   space.
+    macro_abort. EXIT.
+  ENDIF.
+
+  SELECT * FROM eban APPENDING TABLE xeban
+                     FOR ALL ENTRIES IN requisition_items_old
+                     WHERE banfn EQ number
+                     AND   bnfpo EQ requisition_items_old-preq_item.
+
+  IF sy-subrc NE 0.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '030'
+                                   number
+                                   space
+                                   space
+                                   space.
+    macro_abort. EXIT.
+  ENDIF.
+
+  SORT xeban BY banfn bnfpo.
+
+  LOOP AT xeban.
+* delete the items which will not be changed
+    h_tabix = sy-tabix.
+    READ TABLE requisition_items_new WITH KEY preq_item = xeban-bnfpo
+                                     BINARY SEARCH.
+    IF sy-subrc NE 0.
+      DELETE xeban INDEX h_tabix.
+      CONTINUE.
+    ENDIF.
+
+    READ TABLE requisition_items_old WITH KEY preq_item = xeban-bnfpo
+                                     BINARY SEARCH.
+* compare the data from database with requisition_item_old
+    PERFORM requisition_item_compare TABLES requisition_items_old
+                                            xeban.
+    IF data_inconsistent NE space.
+      PERFORM fill_bapireturn TABLES return
+                              USING  'E'
+                                     'W5'
+                                     '058'
+                                     'REQUISITION_ITEM_OLD'
+                                     xeban-bnfpo
+                                     space
+                                     space.
+      DELETE xeban.
+      READ TABLE requisition_items_new WITH KEY preq_item = xeban-bnfpo
+                                       BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        DELETE requisition_items_new INDEX sy-tabix.
+      ENDIF.
+      READ TABLE requisition_items_old WITH KEY preq_item = xeban-bnfpo
+                                       BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        DELETE requisition_items_old INDEX sy-tabix.
+      ENDIF.
+      CONTINUE.
+    ENDIF.
+
+* Subcontracting items will only be processed if dependent reservations
+* won't be touched
+    DATA: rsnum_change_flag TYPE c.
+ENHANCEMENT-SECTION BAPI_REQUISITION_CHANGE_01 SPOTS ES_SAPLMEWQ .
+    IF xeban-pstyp EQ 3 AND xeban-rsnum NE space.
+      CLEAR rsnum_change_flag.
+      PERFORM check_subcontracting_item USING    requisition_items_old
+                                                 requisition_items_new
+                                        CHANGING rsnum_change_flag.
+      IF NOT rsnum_change_flag IS INITIAL.
+        DELETE xeban.
+        READ TABLE requisition_items_new WITH KEY preq_item = xeban-bnfpo
+                                         BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          DELETE requisition_items_new INDEX sy-tabix.
+          PERFORM fill_bapireturn TABLES return
+                              USING  'E'
+                                     'W5'
+                                     '154'
+                                     xeban-banfn
+                                     xeban-bnfpo
+                                     space
+                                     space.
+        ENDIF.
+        READ TABLE requisition_items_old WITH KEY preq_item = xeban-bnfpo
+                                         BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          DELETE requisition_items_old INDEX sy-tabix.
+        ENDIF.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+END-ENHANCEMENT-SECTION.
+*$*$-Start: BAPI_REQUISITION_CHANGE_01----------------------------------------------------------$*$*
+ENHANCEMENT 1  DIPCS_BAPI_REQUISITION_CHANGE.    "active version
+  if xeban-pstyp = pstyp-cust or xeban-pstyp = pstyp-pool.                    "SH 1414948
+*   It is for ADCE customer stock and pooling.
+  else.                                                                       "SH 1414948
+    IF xeban-pstyp EQ 3 AND xeban-rsnum NE space.
+      CLEAR rsnum_change_flag.
+      PERFORM check_subcontracting_item USING    requisition_items_old
+                                                 requisition_items_new
+                                        CHANGING rsnum_change_flag.
+      IF NOT rsnum_change_flag IS INITIAL.
+        DELETE xeban.
+        READ TABLE requisition_items_new WITH KEY preq_item = xeban-bnfpo
+                                         BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          DELETE requisition_items_new INDEX sy-tabix.
+          PERFORM fill_bapireturn TABLES return
+                              USING  'E'
+                                     'W5'
+                                     '154'
+                                     xeban-banfn
+                                     xeban-bnfpo
+                                     space
+                                     space.
+        ENDIF.
+        READ TABLE requisition_items_old WITH KEY preq_item = xeban-bnfpo
+                                         BINARY SEARCH.
+        IF sy-subrc EQ 0.
+          DELETE requisition_items_old INDEX sy-tabix.
+        ENDIF.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+  endif.                                                                      "SH 1414948
+ENDENHANCEMENT.
+*$*$-End:   BAPI_REQUISITION_CHANGE_01----------------------------------------------------------$*$*
+
+* authority check
+    PERFORM requisition_authority_check USING xeban-bsart
+                                              xeban-ekorg
+                                              xeban-ekgrp
+                                              xeban-werks
+                                              '02'.
+    IF no_authority NE space.
+      DELETE xeban.
+      READ TABLE requisition_items_new WITH KEY preq_item = xeban-bnfpo
+                                       BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        DELETE requisition_items_new INDEX sy-tabix.
+        PERFORM fill_bapireturn TABLES return
+                                USING  'E'
+                                       'W5'
+                                       '043'
+                                       xeban-banfn
+                                       xeban-bnfpo
+                                       space
+                                       space.
+      ENDIF.
+      READ TABLE requisition_items_old WITH KEY preq_item = xeban-bnfpo
+                                       BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        DELETE requisition_items_old INDEX sy-tabix.
+      ENDIF.
+      CONTINUE.
+    ENDIF.
+
+* reset account assignment, if item has no account_assignment_category
+    IF xeban-knttp IS INITIAL OR
+       xeban-kzvbr EQ 'U'.
+      LOOP AT requisition_account_new WHERE preq_item EQ
+                                                       xeban-bnfpo.
+        DELETE requisition_account_new.
+      ENDLOOP.
+      LOOP AT requisition_account_old WHERE preq_item EQ
+                                                       xeban-bnfpo.
+        DELETE requisition_account_old.
+      ENDLOOP.
+    ENDIF.
+  ENDLOOP.
+
+* fill the changed data into structure EBAN
+  IF NOT xeban[] IS INITIAL.
+    PERFORM requisition_items_to_xeban_c TABLES requisition_items_old
+                                                requisition_items_new
+                                                xeban
+                                                return
+                                         USING  number.
+    IF exitflag NE space.
+      macro_abort. EXIT.
+    ENDIF.
+  ENDIF.
+
+* read the account assignment from database and fill the internal table
+  IF NOT xeban[] IS INITIAL.
+    PERFORM read_account TABLES xeban
+                                requisition_account_old
+                                requisition_account_new
+                                xebkn
+                                return.
+    IF exitflag NE space.
+      macro_abort. EXIT.
+    ENDIF.
+  ENDIF.
+
+* Change the requisition on database
+  IF NOT xeban[] IS INITIAL.
+    PERFORM requisition_change_data TABLES xebkn
+                                           requisition_text_old
+                                           requisition_text_new
+                                           return
+                                           xeban.
+    IF exitflag NE space.
+      macro_abort. EXIT.
+    ENDIF.
+  ENDIF.
+
+* end of transaction - IDOC-creation or directly COMMIT WORK
+  macro_end.
+
+* send infomessage for successful change
+  IF NOT xeban[] IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'I'
+                                   'W5'
+                                   '041'
+                                   number
+                                   space
+                                   space
+                                   space.
+  ENDIF.
+
+ENDFUNCTION.

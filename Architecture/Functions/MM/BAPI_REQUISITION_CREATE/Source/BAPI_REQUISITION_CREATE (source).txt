@@ -1,0 +1,298 @@
+FUNCTION bapi_requisition_create.                           "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(SKIP_ITEMS_WITH_ERROR) LIKE  BAPIMMPARA-SELECTION OPTIONAL
+*"     VALUE(AUTOMATIC_SOURCE) LIKE  BAPIMMPARA-SELECTION DEFAULT 'X'
+*"  EXPORTING
+*"     VALUE(NUMBER) LIKE  BAPIEBANC-PREQ_NO
+*"  TABLES
+*"      REQUISITION_ITEMS STRUCTURE  BAPIEBANC
+*"      REQUISITION_ACCOUNT_ASSIGNMENT STRUCTURE  BAPIEBKN OPTIONAL
+*"      REQUISITION_ITEM_TEXT STRUCTURE  BAPIEBANTX OPTIONAL
+*"      REQUISITION_LIMITS STRUCTURE  BAPIESUHC OPTIONAL
+*"      REQUISITION_CONTRACT_LIMITS STRUCTURE  BAPIESUCC OPTIONAL
+*"      REQUISITION_SERVICES STRUCTURE  BAPIESLLC OPTIONAL
+*"      REQUISITION_SRV_ACCASS_VALUES STRUCTURE  BAPIESKLC OPTIONAL
+*"      RETURN STRUCTURE  BAPIRETURN OPTIONAL
+*"      REQUISITION_SERVICES_TEXT STRUCTURE  BAPIESLLTX OPTIONAL
+*"      REQUISITION_ADDRDELIVERY STRUCTURE  BAPIMERQADDRDELIVERY
+*"       OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+ENHANCEMENT-POINT BAPI_REQUISITION_CREATE_G8 SPOTS ES_SAPLMEWQ STATIC.
+*$*$-Start: BAPI_REQUISITION_CREATE_G8----------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_REQUISIT000.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_REQUISITION_CREATE_G8----------------------------------------------------------$*$*
+
+ENHANCEMENT-POINT BAPI_REQUISITION_CREATE_G6 SPOTS ES_SAPLMEWQ.
+*$*$-Start: BAPI_REQUISITION_CREATE_G6----------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_REQUISIT000.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050217
+T_MGV_FNAMES1-INT = 'PUR_MAT'.
+T_MGV_FNAMES1-EXT = 'PUR_MAT_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'PUR_MAT_VERSION'.
+T_MGV_FNAMES1-GUID = 'PUR_MAT_GUID'.
+APPEND T_MGV_FNAMES1.
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = REQUISITION_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_REQUISITION_CREATE_G6----------------------------------------------------------$*$*
+
+* generate data record
+  fbgenmac 'BAPI_REQUISITION_CREATE'."#EC NEEDED "#EC * "#EC CI_ROLLBACK
+
+  DATA: lp_number_of_items      TYPE i,
+        lp_number_of_account    TYPE i,
+        h_abort                 TYPE ekpo-loekz,
+        l_external_item_numbers TYPE ekpo-loekz,
+        l_no_source             TYPE xflag VALUE space,
+        l_source                TYPE xflag.
+
+  DATA: wa_req_item    LIKE LINE OF requisition_items,
+        wa_req_account LIKE LINE OF requisition_account_assignment.
+
+  CLEAR: return, number, exitflag, transaction_id, h_abort.
+  REFRESH return.
+  CALL FUNCTION 'MS_REFRESH_STORAGE'.
+* get transaction ID for IDOC-creation
+  macro_start.
+
+* get parameters to complete the data
+  GET PARAMETER ID 'CNT' FIELD h_kostl.
+  GET PARAMETER ID 'BSA' FIELD h_bsart.
+  GET PARAMETER ID 'WRK' FIELD h_werks.
+
+* no items received -> error
+  IF requisition_items[] IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '002'
+                                   space
+                                   space
+                                   space
+                                   space.
+    CLEAR number.
+    macro_abort. EXIT.
+  ENDIF.
+
+*  SORT: requisition_items              BY preq_no preq_item,"910650
+*        requisition_account_assignment BY preq_no preq_item serial_no,
+*        requisition_item_text          BY preq_no preq_item,
+*        requisition_addrdelivery       BY preq_no preq_item.
+  SORT: requisition_items STABLE BY preq_no preq_item,      "953296
+        requisition_account_assignment STABLE
+                    BY preq_no preq_item serial_no,
+        requisition_item_text STABLE BY preq_no preq_item,
+        requisition_addrdelivery STABLE BY preq_no preq_item.
+
+  LOOP AT requisition_items.
+    IF requisition_items-doc_type IS INITIAL.
+      requisition_items-doc_type = h_bsart.
+    ENDIF.
+
+    IF requisition_items-plant IS INITIAL.
+      requisition_items-plant = h_werks.
+    ENDIF.
+
+    IF requisition_items-currency IS INITIAL.
+      PERFORM currency USING requisition_items-plant
+                             requisition_items-currency.
+    ENDIF.
+
+    MODIFY requisition_items INDEX sy-tabix.
+
+    IF requisition_items-acctasscat NE space.
+      SELECT SINGLE * FROM t163k WHERE knttp EQ
+                                 requisition_items-acctasscat.
+      IF sy-subrc EQ 0 AND
+        t163k-kzvbr NE 'U'.
+
+        LOOP AT requisition_account_assignment
+                WHERE preq_item EQ requisition_items-preq_item.
+          IF requisition_account_assignment-cost_ctr IS INITIAL.
+            requisition_account_assignment-cost_ctr = h_kostl.
+          ENDIF.
+          MODIFY requisition_account_assignment INDEX sy-tabix.
+        ENDLOOP.
+
+        IF sy-subrc NE 0.
+          CLEAR requisition_account_assignment.
+          requisition_account_assignment-preq_item =
+          requisition_items-preq_item.
+          requisition_account_assignment-cost_ctr = h_kostl.
+          APPEND requisition_account_assignment.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+* call customer function to complete the data
+  l_source = automatic_source.
+  CALL CUSTOMER-FUNCTION '001'
+       IMPORTING
+            abort                  = h_abort
+            external_item_numbers  = l_external_item_numbers
+            e_no_source            = l_no_source
+       TABLES
+            req_items              = requisition_items
+            req_account_assignment = requisition_account_assignment
+            req_item_text          = requisition_item_text
+            req_limits             = requisition_limits
+            req_contract_limits    = requisition_contract_limits
+            req_services           = requisition_services
+            req_services_text      = requisition_services_text
+            req_srv_accass_values  = requisition_srv_accass_values
+            req_return             = return
+            extensionin            = extensionin
+            req_addrdelivery       = requisition_addrdelivery
+       EXCEPTIONS
+            OTHERS                 = 0.
+
+  IF l_no_source = 'X'.
+    CLEAR l_source.
+  ENDIF.
+
+  IF NOT h_abort IS INITIAL.
+    macro_abort. EXIT.
+  ELSE.
+    IF sy-subrc NE 0.
+      PERFORM fill_bapireturn TABLES return
+                              USING  'E'
+                                     'W5'
+                                     '061'
+                                     'EXIT_SAPLMEWQ_001'
+                                     space
+                                     space
+                                     space.
+      macro_abort. EXIT.
+    ENDIF.
+  ENDIF.
+
+* Reset the internal tables
+  CLEAR: xeban, xebkn, xesll, xesuh, xesuc, xeskl.
+  REFRESH: xeban, xebkn, xesll, xesuh, xesuc, xeskl.
+  CLEAR item_count.
+
+  LOOP AT requisition_items INTO wa_req_item.
+    PERFORM requisition_items_to_xeban TABLES xeban
+                                              return
+                                       USING  wa_req_item
+                                              number.
+
+    CHECK exitflag EQ space.
+* account assignment
+    LOOP AT requisition_account_assignment
+             INTO wa_req_account
+             WHERE preq_item EQ wa_req_item-preq_item.
+      PERFORM requisition_account_to_xebkn TABLES
+                                             xebkn
+                                             return
+                                           USING
+                                             wa_req_account
+                                             number.
+    ENDLOOP.
+  ENDLOOP.
+
+* convert service data
+  PERFORM convert_service_data TABLES xeban
+                                    requisition_limits            xesuh
+                                    requisition_contract_limits   xesuc
+                                    requisition_services          xesll
+                                    requisition_srv_accass_values xeskl
+                                      return.
+
+  DESCRIBE TABLE xeban LINES lp_number_of_items.
+  DESCRIBE TABLE xebkn LINES lp_number_of_account.
+
+* fill customer extensions
+  PERFORM pr_extensionin TABLES extensionin
+                                xebkn
+                                xeban
+                                return
+                          USING lp_number_of_items
+                                lp_number_of_account.
+
+* no entry in internal table XEBAN -> error
+  IF xeban[] IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '002'
+                                   space
+                                   space
+                                   space
+                                   space.
+    CLEAR number.
+    macro_abort. EXIT.
+  ENDIF.
+
+* Create the application object if no error occurred so far
+  PERFORM requisition_create_data TABLES xeban
+                                         xebkn
+                                         requisition_item_text
+                                         xesll
+                                         xeskl
+                                         xesuh
+                                         xesuc
+                                         requisition_services_text
+                                         return
+                                         requisition_addrdelivery
+                                   USING number
+                                         skip_items_with_error
+                                         l_external_item_numbers
+                                         l_source.
+
+* fill object-number if any item is posted
+  IF item_count EQ 0 OR
+     exitflag NE space.
+    CLEAR number.
+    macro_abort. EXIT.
+  ELSE.
+
+* Note 911195
+* Send infomessage for successful change and
+* Transfer Requisition Number to IDoc Status record
+    perform fill_bapireturn tables return
+                            using  'I'
+                                   '06'
+                                   '402'
+                                   number
+                                   space
+                                   space
+                                   space.
+
+* end of transaction - IDOC-creation or directly COMMIT WORK
+    macro_end.
+  ENDIF.
+
+ENHANCEMENT-POINT BAPI_REQUISITION_CREATE_G7 SPOTS ES_SAPLMEWQ.
+*$*$-Start: BAPI_REQUISITION_CREATE_G7----------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_REQUISIT000.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = REQUISITION_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_REQUISITION_CREATE_G7----------------------------------------------------------$*$*
+ENDFUNCTION.

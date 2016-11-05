@@ -1,0 +1,250 @@
+FUNCTION bapi_ps_precommit.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  TABLES
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: lv_wbs_data       TYPE c,
+        lv_network_data   TYPE c,
+        lv_precommit_ok   TYPE c,
+        lv_error          TYPE c,
+        lv_initialized    TYPE c,
+        lv_msghand_num    LIKE sy-uzeit,
+        lv_dialog_status  TYPE flag,
+        lt_project_return TYPE TABLE OF bapiret2 WITH HEADER LINE,
+        lt_network_return TYPE TABLE OF bapiret2 WITH HEADER LINE,
+        lt_return         TYPE TABLE OF bapiret2 WITH HEADER LINE,
+        lt_objects        TYPE psguid_tt_guid_for_extern,
+        lt_objs_changed   TYPE psguid_tt_guid_for_extern,
+        lt_objs_unchanged TYPE psguid_tt_guid_for_extern.
+
+* initialisation ...
+  CLEAR   et_return.
+  REFRESH et_return.
+
+* Get relevant flags
+  CALL FUNCTION 'PS_FLAG_GET_GLOBAL_FLAGS'
+       IMPORTING
+            e_wbs_data     = lv_wbs_data
+            e_network_data = lv_network_data
+            e_precommit_ok = lv_precommit_ok
+            e_error        = lv_error
+            e_initialized  = lv_initialized.
+
+* Check wether any single BAPI failed
+  IF NOT lv_error IS INITIAL.
+*   Error in at least one single BAPI
+    MESSAGE e056(cnif_pi) INTO null.
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+*   Overall precommit failed
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_precommit_ok = 'N'.
+    EXIT.
+* Check if precommit can be called.
+  ELSEIF NOT lv_precommit_ok IS INITIAL.
+*   Precommit was already called in the current LUW
+    MESSAGE e031(cnif_pi) INTO null.
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+    EXIT.
+  ENDIF.
+
+* Check change of data
+  IF lv_wbs_data     IS INITIAL AND
+     lv_network_data IS INITIAL.
+*   No change of data in current LUW: Precommit is not necessary
+    MESSAGE i032(cnif_pi) INTO null.
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+    EXIT.
+  ENDIF.
+
+* Check initialization
+  IF lv_initialized IS INITIAL.
+    MESSAGE e078(cnif_pi) INTO null.
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+    EXIT.
+  ENDIF.
+
+****************************Note 1344383********************************
+  DATA: CATALOG TYPE STANDARD TABLE OF TCATALOG.
+  DATA: LT_CATALOG TYPE STANDARD TABLE OF TCATALOG,
+       LS_CATALOG TYPE TCATALOG,
+       LT_NET TYPE STANDARD TABLE OF TCATALOG.
+  DATA LT_TEXT type STANDARD TABLE OF TCATALOG. " Nt 1538586
+
+  IMPORT CATALOG TO CATALOG FROM MEMORY ID 'SAPLSTXD'.
+  IF SY-SUBRC = 0.
+    LOOP AT CATALOG INTO LS_CATALOG.
+      IF LS_CATALOG-TDOBJECT = 'PMS'.
+        APPEND LS_CATALOG TO LT_CATALOG.
+      ELSEIF LS_CATALOG-TDOBJECT = 'AUFK'.     " Nt 1538586
+        APPEND LS_CATALOG TO  LT_NET.
+      ELSE.                                    " Nt 1538586
+        APPEND LS_CATALOG TO LT_TEXT.          " Nt 1538586
+      ENDIF.
+    ENDLOOP.
+    REFRESH CATALOG[].
+    EXPORT CATALOG FROM LT_NET TO MEMORY ID 'SAPLSTXD'.
+  ENDIF.
+****************************Note 1344383********************************
+
+
+* CJ20, CJ2B and (as of note 504803) CJ20N first call the precommit for
+* projects and then for networks
+* In this case, however, BAPI_PS_PRECOMMIT itself has to trigger GUID
+* determination. This is only possible after number switch. Neither
+* number switch nor GUID determinatiuon can hance be shifted to point
+* in time 'on commit' - PERFORM ON_COMMIT_CJWB ON COMMIT is not
+* possible respextively.
+
+**********************************************************************
+***** Save routines for networks, activities & activity elements *****
+**********************************************************************
+  IF NOT lv_network_data IS INITIAL.
+*   Some network stuff to be posted
+    CALL FUNCTION 'CN2002_NETWORK_PRECOMMIT'
+         TABLES
+              et_return = lt_network_return.
+  ENDIF.
+
+  EXPORT CATALOG FROM LT_CATALOG TO MEMORY ID 'SAPLSTXD'."Note 1344383
+
+***************************************************************
+***** Save routines for project definition & WBS elements *****
+***************************************************************
+  IF NOT lv_wbs_data IS INITIAL.
+*   Some project stuff to be posted
+    CALL FUNCTION 'CJ2001_PROJECT_PRECOMMIT'
+         TABLES
+              et_return = lt_project_return.
+  ENDIF.
+
+EXPORT CATALOG FROM LT_TEXT TO MEMORY ID 'SAPLSTXD'."Note 1538586
+***************************************************
+***** Message handling and GUID determination *****
+***************************************************
+* Collect messages (use LT_RETURN temporarly to get the S-messages -
+* possibly created in case of overall success - on top of log)
+  CLEAR lt_return. REFRESH lt_return.
+  APPEND LINES OF lt_project_return TO lt_return.
+  APPEND LINES OF lt_network_return TO lt_return.
+  CLEAR lt_return.
+
+  LOOP AT lt_return WHERE type CA con_eax.
+*   At least one error is in log: Overall precommit failed
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_precommit_ok = 'N'.
+    EXIT.
+  ENDLOOP.
+  IF NOT sy-subrc IS INITIAL.
+*   No error in log: Overall precommit was ok so far except GUIDs
+
+*   Get all objects where the single check was ok
+    CALL FUNCTION 'PS_BAPI_SUCCESS_BT_GET'
+         TABLES
+              et_objects = lt_objects.
+
+    IF NOT lt_objects[] IS INITIAL.
+*     Figure out all 'changed' objects that nevertheless remain
+*     unchanged (e.g. 'changed' a value from ABC to ABC) using update
+*     flags in buffer table.
+*     Put these files into NIL table for message I081(CNIF_PI)
+      CALL FUNCTION 'PS_BAPI_SUCCESS_BT_MAP_CHANGES'
+           TABLES
+                it_objects        = lt_objects
+                et_objs_changed   = lt_objs_changed
+                et_objs_unchanged = lt_objs_unchanged.
+    ENDIF.
+
+    IF NOT lt_objs_changed[] IS INITIAL.
+*     Read GUIDs for these objects (the regarding GUIDs have already
+*     been created/changed/deactivated in CN2002_NETWORK_PRECOMMIT and
+*     CJ2001_PROJECT_PRECOMMIT)
+      CALL FUNCTION 'PS_GUID_READ_GUIDS_WITH_KEY'
+           EXPORTING
+                it_objectkey = lt_objs_changed
+           IMPORTING
+                et_objectkey = lt_objs_changed
+           EXCEPTIONS
+                not_found    = 1
+                error_in_key = 2.
+    ELSE.
+*     E.g. Status change via STATUS-BAPI
+      CLEAR sy-subrc.
+    ENDIF.
+    IF NOT sy-subrc IS INITIAL.
+*     Eventually, we must fail due to error in GUID determination
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_precommit_ok = 'N'.
+*     Overall GUID error message (however, unexpected)
+      MESSAGE e054(cnif_pi) INTO null.
+      CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+           TABLES
+                return = et_return.
+    ELSE.
+*     No error whilst GUID retrieval or we just deal w/ a status change
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_precommit_ok = 'Y'.
+
+      IF NOT lt_objects[] IS INITIAL.
+*       For all objects created/changed/deleted within PI-BAPIs until
+*       now, set a success message with object type, external key,
+*       action and GUID into the return table. Use ET_RETURN to get
+*       these success messages on top, as the messages so far triggered
+*       are temporarly in LT_RETURN
+
+*       Init log
+*       Exception 'message_handler_error' is NOT caught by design to
+*       force a dump as we deal with a program error in this case
+        CALL FUNCTION 'PS_BAPI_INITIALIZE'
+             IMPORTING
+                  e_dialog_status = lv_dialog_status
+                  e_msghand_num   = lv_msghand_num
+             TABLES
+                  return          = et_return.
+*       Force writing of log
+        CALL FUNCTION 'PS_BAPI_SUCCESS_BT_INTO_LOG'
+             TABLES
+                  it_objs_changed   = lt_objs_changed
+                  it_objs_unchanged = lt_objs_unchanged.
+*       Get success messages from log into return table
+        CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APPEND'
+             EXPORTING
+                  i_msghand_num = lv_msghand_num
+             TABLES
+                  return        = et_return.
+*       Reset dialog flags etc.
+        PERFORM bapi_dialog_end USING lv_dialog_status.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+* Append the precommit-messages LT_RETURN to the 'real' return table
+* ET_RETURN
+  CLEAR et_return.
+  APPEND LINES OF lt_return TO et_return.
+
+* All-or-nothing principle: call chk_precommit early (negative level)
+* at all cases
+  PERFORM chk_precommit ON COMMIT LEVEL con_low_level.
+
+* Make sure that application data is reset in case of rollback work to
+* enable subsequent work: call chk_rollback in all cases
+  PERFORM chk_rollback ON ROLLBACK.
+
+* This is just for testing (be able to play commit in debugger)
+  PERFORM testsave.
+
+ENDFUNCTION.

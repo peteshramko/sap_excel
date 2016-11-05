@@ -1,0 +1,111 @@
+FUNCTION K_CSKS_SET_AUTHORITY_CHECK.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(ACTVT) LIKE  TACT-ACTVT DEFAULT SPACE
+*"             VALUE(KOKRS) LIKE  CCSS-KOKRS DEFAULT SPACE
+*"             VALUE(GROUP) LIKE  SETHIER-SHORTNAME DEFAULT SPACE
+*"       EXCEPTIONS
+*"              SYSTEM_ERROR
+*"              USER_NOT_AUTHORIZED
+*"----------------------------------------------------------------------
+
+*-----------------------------------------------------------------------
+* Verarbeitungsablauf:
+*-----------------------------------------------------------------------
+*
+* suchen gepufferten Eintrag
+* diesen gepufferten Eintrag gefunden ?
+* ... nein, expliziter AUTHORITY-CHECK mit übergebenen Werten
+*
+* RC-Prüfen
+*
+*-----------------------------------------------------------------------
+************************************************************************
+*                                                                      *
+* 4.0A: New check on responsibility areas                              *
+*                                                                      *
+************************************************************************
+
+  DATA: NEW_RC LIKE SY-SUBRC,
+        OLD_RC LIKE SY-SUBRC,
+        CO_ACTION LIKE COACT-CO_ACTION.
+
+
+  DATA: I_ACTVT LIKE TACT-ACTVT.
+
+
+*...process old logic first............................................*
+
+* IF ACTVT <> '03'.                                   "n 831350
+  IF ACTVT <> '03' AND ACTVT <> '06'.                 "n 831350
+    I_ACTVT = '02'.
+  ELSE.
+    I_ACTVT = ACTVT.
+  ENDIF.
+
+  PERFORM K_CSKS_SET_READ_TAB USING I_ACTVT
+                                    KOKRS.
+  IF  K_CSKS_SET_TAB-EXCEP = 99.
+      PERFORM K_CSKS_SET_AUTHORITY_CHECK USING I_ACTVT
+                                               KOKRS.
+  ENDIF.
+
+  OLD_RC = K_CSKS_SET_TAB-EXCEP.
+
+*..in customer exit it can be decided not to check K_CCA
+  if not gd_continue is initial.
+     exit.
+  endif.
+
+************************************************************************
+*                                                                      *
+* begin of new coding for check on responsibility area                 *
+*                                                                      *
+************************************************************************
+
+ CALL FUNCTION 'COTB_CO_ACTION_GET'
+      EXPORTING
+           ACTVT       = ACTVT
+           VRGNG       = 'STDT'
+      IMPORTING
+           CO_ACTION   = CO_ACTION
+      EXCEPTIONS
+           WRONG_VRGNG = 1
+           OTHERS      = 2.
+
+
+  CALL FUNCTION 'COTB_OBJECT_CHECK'
+       EXPORTING
+            KOKRS                 = KOKRS
+            KSTGR                 = GROUP
+            CO_ACTION             = CO_ACTION
+       IMPORTING
+            AUTH_RC               = NEW_RC
+       EXCEPTIONS
+            OTHERS                = 1.
+
+
+  IF NEW_RC > 0 OR OLD_RC > 0.
+    CASE ACTVT.
+      WHEN '01'.
+        MESSAGE ID 'UW' TYPE 'E' NUMBER '010'
+                RAISING USER_NOT_AUTHORIZED.
+      WHEN '02'.
+        MESSAGE ID 'UW' TYPE 'E' NUMBER '011'
+                RAISING USER_NOT_AUTHORIZED.
+      WHEN '03'.
+        MESSAGE ID 'UW' TYPE 'E' NUMBER '012'
+                RAISING USER_NOT_AUTHORIZED.
+      WHEN '06'.
+        MESSAGE ID 'UW' TYPE 'E' NUMBER '013'
+                RAISING USER_NOT_AUTHORIZED.
+      WHEN OTHERS.
+        RAISE USER_NOT_AUTHORIZED.
+
+    ENDCASE.
+
+  ENDIF.
+
+
+ENDFUNCTION.

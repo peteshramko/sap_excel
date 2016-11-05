@@ -1,0 +1,136 @@
+function bapi_bus2002_change.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_NUMBER) LIKE  BAPI_NETWORK_LIST-NETWORK
+*"     VALUE(I_NETWORK) LIKE  BAPI_BUS2002_CHG STRUCTURE
+*"        BAPI_BUS2002_CHG
+*"     VALUE(I_NETWORK_UPD) LIKE  BAPI_BUS2002_UPD STRUCTURE
+*"        BAPI_BUS2002_UPD
+*"  TABLES
+*"      ET_RETURN STRUCTURE  BAPIRET2
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  data: lv_key               type char24,
+        lv_dialog_status_tmp type flag,
+        lv_msghand_num       like sy-uzeit,
+        lv_subrc             like sy-subrc,
+        lv_error             type c,
+
+        ls_object            type psguid_ts_guid_for_extern.
+
+* Init BAPI
+* Exception 'message_handler_error' is NOT caught by design to force a
+* dump as we deal with a program error in this case
+  call function 'PS_BAPI_INITIALIZE'
+       importing
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       tables
+            return          = et_return.
+* Prepare BAPI
+  call function 'PS_BAPI_PREPARE'
+       exporting
+            i_number                 = i_number
+            i_network_change         = i_network
+            i_update_network         = i_network_upd
+            i_method                 = con_net_change
+       importing
+            e_number                 = i_number
+       tables
+            extensionin              = extensionin
+            extensionout             = extensionout
+       exceptions
+            precommit_already_called = 1
+            init_missing             = 2
+            network_read_error       = 3
+            one_project_violation    = 4
+            badi_error               = 5.
+  lv_subrc = sy-subrc.
+
+  if lv_subrc is initial.
+    call function 'CN2002_NETWORK_CHANGE'
+         exporting
+              i_number            = i_number
+              i_network           = i_network
+              i_network_upd       = i_network_upd
+         tables
+              extensionin         = extensionin
+         exceptions
+              network_not_changed = 1.
+    lv_subrc = sy-subrc.
+  else.
+*   Prepare failed: convert network number
+    call function 'EXT_NETWORK_GET_INT_NETWORK'
+         exporting
+              i_ext_network = i_number
+         importing
+              e_int_network = i_number
+         exceptions
+              error_occured = 0.
+  endif.
+
+  if not lv_subrc is initial.
+*   Error in prepare or whilst change
+    lv_error = con_yes.
+    message e018(cnif_pi) with text-net i_number
+                          into null.
+    call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+         exporting
+              i_error = con_yes.
+  else.
+*   Change successful
+    clear lv_error.
+    message s010(cnif_pi) with text-net i_number
+                          into null.
+    call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+         exporting
+              i_network_data = con_yes.
+*   Register object in success buffer table
+    clear ls_object.
+    ls_object-object_type = con_objtype_network.
+    ls_object-network     = i_number.
+    ls_object-vbkz        = con_net_change.
+    call function 'PS_BAPI_SUCCESS_BT_APPEND'
+         exporting
+              i_object         = ls_object
+         exceptions
+              wrong_parameters = 0.
+  endif.
+
+* Get last message of current activity ('S' vs. 'E') as first one in
+* the log (only 'message ... into null' NOT followed by 'perform
+* put_sy_message(saplco2o)')
+  call function 'PS_BAPI_MESSAGE_APPEND'
+       tables
+            return = et_return.
+
+* Get remaining messages of current activity (stored by 'message ...
+* into null' AND 'perform put_sy_message(saplco2o)')
+  write i_number to lv_key.
+  call function 'PS_BAPI_APPL_MESSAGE_APP_EXT'
+       exporting
+            i_objectkey   = lv_key
+            i_msghand_num = lv_msghand_num
+            i_error_case  = lv_error
+       tables
+            et_return     = et_return.
+
+* Finish BAPI
+  call function 'PS_BAPI_FINISH'
+       exporting
+            i_network_change = i_network
+            i_update_network = i_network_upd
+            i_dialog_status  = lv_dialog_status_tmp
+            i_msghand_num    = lv_msghand_num
+            i_number         = i_number
+            i_method         = con_net_change
+            i_subrc          = lv_subrc
+       tables
+            return           = et_return
+            extensionin      = extensionin
+            extensionout     = extensionout.
+
+endfunction.

@@ -1,0 +1,345 @@
+FUNCTION bapi_po_getdetail.                                 "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(PURCHASEORDER) LIKE  BAPIEKKO-PO_NUMBER
+*"     VALUE(ITEMS) LIKE  BAPIMMPARA-SELECTION DEFAULT 'X'
+*"     VALUE(ACCOUNT_ASSIGNMENT) LIKE  BAPIMMPARA-SELECTION DEFAULT
+*"       SPACE
+*"     VALUE(SCHEDULES) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(HISTORY) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(ITEM_TEXTS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(HEADER_TEXTS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(SERVICES) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(CONFIRMATIONS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(SERVICE_TEXTS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"     VALUE(EXTENSIONS) LIKE  BAPIMMPARA-SELECTION DEFAULT SPACE
+*"  EXPORTING
+*"     VALUE(PO_HEADER) LIKE  BAPIEKKOL STRUCTURE  BAPIEKKOL
+*"     VALUE(PO_ADDRESS) LIKE  BAPIADDRESS STRUCTURE  BAPIADDRESS
+*"  TABLES
+*"      PO_HEADER_TEXTS STRUCTURE  BAPIEKKOTX OPTIONAL
+*"      PO_ITEMS STRUCTURE  BAPIEKPO OPTIONAL
+*"      PO_ITEM_ACCOUNT_ASSIGNMENT STRUCTURE  BAPIEKKN OPTIONAL
+*"      PO_ITEM_SCHEDULES STRUCTURE  BAPIEKET OPTIONAL
+*"      PO_ITEM_CONFIRMATIONS STRUCTURE  BAPIEKES OPTIONAL
+*"      PO_ITEM_TEXTS STRUCTURE  BAPIEKPOTX OPTIONAL
+*"      PO_ITEM_HISTORY STRUCTURE  BAPIEKBE OPTIONAL
+*"      PO_ITEM_HISTORY_TOTALS STRUCTURE  BAPIEKBES OPTIONAL
+*"      PO_ITEM_LIMITS STRUCTURE  BAPIESUH OPTIONAL
+*"      PO_ITEM_CONTRACT_LIMITS STRUCTURE  BAPIESUC OPTIONAL
+*"      PO_ITEM_SERVICES STRUCTURE  BAPIESLL OPTIONAL
+*"      PO_ITEM_SRV_ACCASS_VALUES STRUCTURE  BAPIESKL OPTIONAL
+*"      RETURN STRUCTURE  BAPIRETURN OPTIONAL
+*"      PO_SERVICES_TEXTS STRUCTURE  BAPIESLLTX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+  ENHANCEMENT-POINT BAPI_PO_GETDETAIL_G8 SPOTS ES_SAPLMEWP STATIC.
+*$*$-Start: BAPI_PO_GETDETAIL_G8----------------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_PO_GETDE001.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+DATA: T_MGV_FNAMES2 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETDETAIL_G8----------------------------------------------------------------$*$*
+
+  ENHANCEMENT-POINT BAPI_PO_GETDETAIL_G6 SPOTS ES_SAPLMEWP.
+*$*$-Start: BAPI_PO_GETDETAIL_G6----------------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_PO_GETDE001.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050216
+T_MGV_FNAMES1-INT = 'PUR_MAT'.
+T_MGV_FNAMES1-EXT = 'PUR_MAT_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'PUR_MAT_VERSION'.
+T_MGV_FNAMES1-GUID = 'PUR_MAT_GUID'.
+APPEND T_MGV_FNAMES1.
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEM_HISTORY
+  .
+T_MGV_FNAMES2-INT = 'PUR_MAT'.
+T_MGV_FNAMES2-EXT = 'PUR_MAT_EXTERNAL'.
+T_MGV_FNAMES2-VERS = 'PUR_MAT_VERSION'.
+T_MGV_FNAMES2-GUID = 'PUR_MAT_GUID'.
+APPEND T_MGV_FNAMES2.
+T_MGV_FNAMES2-INT = 'MATERIAL'.
+T_MGV_FNAMES2-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES2-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES2-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES2.
+T_MGV_FNAMES2-INT = 'CONF_MATL'.
+T_MGV_FNAMES2-EXT = 'CONF_MATL_EXTERNAL'.
+T_MGV_FNAMES2-VERS = 'CONF_MATL_VERSION'.
+T_MGV_FNAMES2-GUID = 'CONF_MATL_GUID'.
+APPEND T_MGV_FNAMES2.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES2
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETDETAIL_G6----------------------------------------------------------------$*$*
+
+* generate data record
+  fbgenmac 'BAPI_PO_GETDETAIL'.                      "#EC NEEDED "#EC *
+
+* define local data objects
+  DATA: lo_obj TYPE REF TO lcl_utility.                     "1776898
+
+* reset all structures and tables
+  CLEAR: po_header, po_address, po_items, po_header_texts,
+         po_item_account_assignment, po_item_schedules,
+         po_item_texts, return, ekpokey, po_item_history,
+         po_item_history_totals, po_item_limits, po_item_services,
+         po_item_contract_limits, po_item_srv_accass_values,
+         po_item_confirmations, po_services_texts,
+         cekko, cekpo, cekkn, ceket, cekan, sekko, sekpo, cadr, cekes.
+  REFRESH:
+         po_header_texts, po_item_account_assignment, po_item_schedules,
+         po_item_texts, po_items, return, ekpokey, po_item_history,
+         po_item_history_totals, po_item_limits, po_item_services,
+         po_item_contract_limits, po_item_srv_accass_values,
+         po_item_confirmations, po_services_texts,
+         cekkn, ceket, sekko, sekpo, cekes.
+*
+* Get Utility instance
+  lo_obj = lcl_utility=>get_instance( ).                    "1776898
+* select the header data from database
+  SELECT SINGLE * FROM ekko WHERE ebeln EQ purchaseorder.
+  IF sy-subrc NE 0.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '107'
+                                   purchaseorder
+                                   space
+                                   space
+                                   space.
+    IF 1 = 2. MESSAGE e107(w5) WITH ''. ENDIF.
+    EXIT.
+  ENDIF.
+
+
+* authority check
+  PERFORM po_authority_header TABLES return
+                              USING  ekko.
+  IF no_authority NE space.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '033'
+                                   space
+                                   space
+                                   space
+                                   space.
+    IF 1 = 2. MESSAGE e033(w5). ENDIF.
+    EXIT.
+  ENDIF.
+
+* move internal header data to the external structure PO_HEADER
+  PERFORM ekko_to_po_header TABLES return
+                            USING ekko po_header.
+
+* select the addresses from database
+  CALL FUNCTION 'MM_ADDRESS_GET'
+    EXPORTING
+      i_ekko        = ekko
+    IMPORTING
+      e_address     = cadr
+    EXCEPTIONS
+      error_message = 0
+      OTHERS        = 0.
+  MOVE-CORRESPONDING cadr TO po_address.                    "#EC ENHOK
+
+* select header texts from database, if user wants it
+  IF header_texts NE space.
+    PERFORM read_header_texts TABLES po_header_texts
+                                     return
+                              USING  purchaseorder.
+  ENDIF.
+
+* select the items from database, if user wants it
+  IF items NE space.
+    SELECT * FROM ekpo WHERE ebeln EQ ekko-ebeln.
+      PERFORM po_authority_item TABLES return
+                                USING  ekpo.
+      CLEAR: po_items.                                      "n_1078712
+      CHECK no_authority EQ space.
+      PERFORM ekpo_to_po_items TABLES po_items
+                                      return
+                               USING  ekpo
+                                      ekko-waers.
+      lo_obj->register_item( ekpo ).                        "1776898
+      ENHANCEMENT-POINT bapi_po_getdetail_02 SPOTS es_saplmewp.
+*$*$-Start: BAPI_PO_GETDETAIL_02----------------------------------------------------------------$*$*
+ENHANCEMENT 1  /NFM/MM_BAPI_PO_GETDETAIL1.    "active version
+* /NFM/ processing - C5007732
+* fill NFM data for PO item
+      call function '/NFM/CA_BAPI_DOCITM_READ'
+        exporting
+          im_doc_type_nfm       = 'B'
+          im_doc_no             = po_items-po_number
+          im_item_no            = po_items-po_item
+          im_comp_code          = po_items-co_code
+        tables
+          t_nfmetallitms        = nfmetallitms.
+*
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETDETAIL_02----------------------------------------------------------------$*$*
+    ENDSELECT.
+  ELSE.
+    IF account_assignment NE space OR
+       item_texts         NE space OR
+       schedules          NE space OR
+       history            NE space OR
+       services           NE space OR
+       confirmations      NE space.
+      PERFORM fill_ekpokey USING purchaseorder.
+    ENDIF.
+  ENDIF.
+  SORT ekpokey.
+
+* select account assignment per item, if user wants it
+  IF account_assignment NE space AND NOT ekpokey[] IS INITIAL.
+    SELECT * FROM ekkn APPENDING TABLE cekkn
+                       FOR ALL ENTRIES IN ekpokey
+                       WHERE ebeln EQ ekpokey-ebeln
+                       AND   ebelp EQ ekpokey-ebelp.
+    PERFORM cekkn_to_account_assignment TABLES cekkn
+                                        po_item_account_assignment.
+  ENDIF.
+
+* select schedules per item, if user wants it
+  IF schedules NE space AND NOT ekpokey[] IS INITIAL.
+    SELECT * FROM eket APPENDING TABLE ceket
+                       FOR ALL ENTRIES IN ekpokey
+                       WHERE ebeln EQ ekpokey-ebeln
+                       AND   ebelp EQ ekpokey-ebelp.
+    PERFORM ceket_to_schedules TABLES ceket
+                                      po_item_schedules.
+  ENDIF.
+
+* select item texts per item, if user wants it
+  IF item_texts NE space.
+    PERFORM read_item_texts TABLES po_item_texts
+                                   return.
+  ENDIF.
+
+* select confirmations per item, if user wants it
+  IF confirmations NE space.
+    PERFORM read_item_confirmations TABLES po_item_confirmations
+                                           cekes.
+    PERFORM cekes_to_confirmations TABLES cekes
+                                          po_item_confirmations
+                                   USING  purchaseorder.
+
+  ENDIF.
+
+* select history, if user wants it
+  IF history NE space.
+    LOOP AT ekpokey.
+      CLEAR: cekbe, cekbes, cekbez, cekbz, cekbnk.
+      REFRESH: cekbe, cekbes, cekbez, cekbz, cekbnk.
+      CALL FUNCTION 'ME_READ_HISTORY'
+        EXPORTING
+          ebeln         = ekpokey-ebeln
+          ebelp         = ekpokey-ebelp
+          webre         = ekpokey-webre
+        TABLES
+          xekbe         = cekbe
+          xekbes        = cekbes
+          xekbez        = cekbez
+          xekbnk        = cekbnk
+          xekbz         = cekbz
+        EXCEPTIONS
+          error_message = 0
+          OTHERS        = 0.
+      lo_obj->set_history( iv_ebeln = ekpokey-ebeln        "1776898
+                           iv_ebelp = ekpokey-ebelp
+                           it_data  = cekbe[] ).
+      PERFORM cekbe_to_history TABLES cekbe
+                                      return
+                                      po_item_history.
+      PERFORM cekbes_to_history_totals TABLES cekbes
+                                       return
+                                       po_item_history_totals.
+    ENDLOOP.
+  ENDIF.
+
+* select services/limits, if user wants it
+  IF services NE space.
+    PERFORM read_services TABLES po_item_limits
+                                 po_item_contract_limits
+                                 po_item_services
+                                 po_item_srv_accass_values
+                                 po_items
+                                 return.
+  ENDIF.
+
+* select service texts per service, if user wants it
+  IF service_texts NE space.
+    PERFORM read_service_texts TABLES po_services_texts
+                                      po_item_services
+                                      return
+                               USING  ekko-spras.
+  ENDIF.
+
+* move customer fields to table EXTENSIONOUT
+  IF extensions IS NOT INITIAL.                             "1776898
+    PERFORM move_extensionout
+                 TABLES extensionout
+                        return
+                 USING  ekko.
+  ENDIF.
+*
+* generate EXTENSIONOUT for SRM integration
+  IF history IS NOT INITIAL.                                "1776898
+    lo_obj->create_extension( CHANGING ct_data = extensionout[] ).
+  ENDIF.
+
+  SORT po_items BY po_number po_item.
+  SORT po_item_account_assignment BY po_item serial_no.
+  SORT po_item_schedules BY po_item serial_no.
+  SORT po_item_confirmations BY po_item conf_ser.
+  SORT po_item_history BY po_item serial_no.
+  SORT po_item_history_totals BY po_item serial_no.
+  SORT po_item_limits BY pckg_no.
+  SORT po_item_contract_limits BY pckg_no line_no.
+  SORT po_item_services BY pckg_no line_no.
+  SORT po_item_srv_accass_values BY pckg_no line_no serno_line.
+*
+* cleanup local classes
+  lcl_utility=>cleanup( ).                                  "1776898
+
+  ENHANCEMENT-POINT BAPI_PO_GETDETAIL_G7 SPOTS ES_SAPLMEWP.
+*$*$-Start: BAPI_PO_GETDETAIL_G7----------------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_PO_GETDE001.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEM_HISTORY
+  .
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES2
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GETDETAIL_G7----------------------------------------------------------------$*$*
+ENDFUNCTION.

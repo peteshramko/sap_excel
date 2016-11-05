@@ -1,0 +1,342 @@
+FUNCTION /excel4ap/con_cache_4_4.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(LEFT) TYPE  STRING
+*"     VALUE(RIGHT) TYPE  STRING
+*"     VALUE(FROM) TYPE  STRING
+*"     VALUE(WANCOMPRESS) TYPE  I
+*"     VALUE(USE_FOR_ALL_ENTRIES) TYPE  BOOLEAN
+*"     VALUE(FIELD_FOR_ALL_ENTRIES) TYPE  STRING
+*"     VALUE(EXEC_AUTH_CHECK) TYPE  BOOLEAN
+*"     VALUE(ENHANCE_PROCESS) TYPE  BOOLEAN
+*"  TABLES
+*"      OUTPUT STRUCTURE  /EXCEL4AP/OUTPUT_STRUCT
+*"      FIELD_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      COND_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      RETURN STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      ORD_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      CONV_LIST STRUCTURE  /EXCEL4AP/EXPORT_STRUCT
+*"      FOR_ALL_ENTRIES_LIST STRUCTURE  /EXCEL4AP/LIST_STRUCT
+*"      CODE STRUCTURE  /EXCEL4AP/72CHARSTRUCT
+*"----------------------------------------------------------------------
+
+
+*{   INSERT         DEVK900059                                        1
+*
+* Excel4Apps connector cache - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 2.00
+
+  "Declarations - dynamic structures
+  DATA:
+            struct_type     TYPE REF TO cl_abap_structdescr,
+            table_type      TYPE REF TO cl_abap_tabledescr,
+            symb_tab1       TYPE  cl_abap_structdescr=>symbol_table,
+            symb_tab2       TYPE  cl_abap_structdescr=>symbol_table,
+            comp_tab3       TYPE  cl_abap_structdescr=>component_table,
+            symb1           LIKE LINE OF symb_tab1,
+            symb2           LIKE LINE OF symb_tab2,
+            comp3           LIKE LINE OF comp_tab3,
+            wa_field(50)    TYPE c,
+            tref            TYPE REF TO data,
+            oref            TYPE REF TO cx_root,
+            wa_compress     TYPE /excel4ap/export_struct,
+            wa_conv         TYPE /excel4ap/export_struct,
+            sort_order_tab  TYPE abap_sortorder_tab,
+            sort_order      TYPE abap_sortorder,
+            old_rc          LIKE sy-subrc,
+            new_rc          LIKE sy-subrc,
+            lv_kokrs        TYPE csks-kokrs,
+            lv_kostl        TYPE csks-kostl,
+            lv_prctr        TYPE cepc-prctr.
+
+  "Declarations - output
+  DATA: numlines TYPE i, numfields(2) TYPE c, length TYPE i, pointer TYPE i, filler TYPE i.
+  DATA fieldref(20) TYPE c.
+
+  FIELD-SYMBOLS: <i_tab> TYPE STANDARD TABLE,
+                 <i_tab2> TYPE STANDARD TABLE,
+                 <f1> TYPE any, <f2> TYPE any, <f3> TYPE any,
+                 <f4> TYPE any, <wa_itab2> TYPE any, <wa_itab2_field> TYPE any.
+
+  "Clear results tables
+  REFRESH output.
+  REFRESH return.
+
+  TRY.
+
+      "Get structure type for both tables
+      IF left <> ''.
+        struct_type ?=
+          cl_abap_typedescr=>describe_by_name( left ).
+        symb_tab1 = struct_type->get_symbols( ).
+      ENDIF.
+
+      IF right <> ''.
+        struct_type ?=
+          cl_abap_typedescr=>describe_by_name( right ).
+        symb_tab2 = struct_type->get_symbols( ).
+      ENDIF.
+
+      "Append fields from tab2 in tab1 if not already there
+      LOOP AT symb_tab2 INTO symb2.
+        READ TABLE symb_tab1 INTO symb1
+                WITH TABLE KEY name = symb2-name.
+        IF sy-subrc <> 0.
+          INSERT symb2 INTO TABLE symb_tab1.
+        ENDIF.
+      ENDLOOP.
+
+      "Loop at our field list
+      LOOP AT field_list INTO wa_field.
+
+        "Strip out alias if there is one
+        SEARCH wa_field FOR '~'.
+        IF sy-subrc = 0.
+          length = strlen( wa_field ).
+          pointer = sy-fdpos + 1.
+          wa_field = wa_field+pointer(length).
+        ENDIF.
+
+        "Add to component tab if our field in combined struc
+        READ TABLE symb_tab1 WITH TABLE KEY name = wa_field INTO symb1.
+        IF sy-subrc = 0.
+          comp3-name = symb1-name.
+          comp3-type = symb1-type.
+          APPEND comp3 TO comp_tab3.
+        ENDIF.
+      ENDLOOP.
+
+      "Dynamically create the final structure
+      CHECK comp_tab3 IS NOT INITIAL.
+      struct_type = cl_abap_structdescr=>create( comp_tab3 ).
+      table_type = cl_abap_tabledescr=>create( struct_type ).
+      CREATE DATA tref TYPE HANDLE table_type.
+      ASSIGN tref->* TO <i_tab>.
+
+      "Fetch the data
+      IF use_for_all_entries <> 'X'.
+
+        SELECT (field_list) INTO CORRESPONDING FIELDS OF TABLE <i_tab>
+          FROM (from) WHERE (cond_list) ORDER BY (ord_list).
+
+      ELSE.
+
+        "Create for all entries table of same type
+        CREATE DATA tref TYPE HANDLE table_type.
+        ASSIGN tref->* TO <i_tab2>.
+
+        "Create a work area of same structure as itab2
+        CREATE DATA tref TYPE HANDLE struct_type.
+        ASSIGN tref->* TO <wa_itab2>.
+
+        "Get the field for all entries
+        CONCATENATE '<WA_ITAB2>-' field_for_all_entries
+        INTO field_for_all_entries.
+
+        "Assign output column to field symbol
+        ASSIGN (field_for_all_entries) TO <wa_itab2_field>.
+
+        LOOP AT for_all_entries_list INTO <wa_itab2_field>.
+
+          APPEND <wa_itab2> TO <i_tab2>.
+
+        ENDLOOP.
+
+        SELECT (field_list) INTO CORRESPONDING FIELDS OF TABLE <i_tab>
+                 FROM (from)
+          FOR ALL ENTRIES IN <i_tab2>
+          WHERE (cond_list).
+
+        "Sort the table
+        LOOP AT ord_list INTO wa_field.
+          sort_order-name = wa_field.
+          APPEND sort_order TO sort_order_tab.
+        ENDLOOP.
+
+        SORT <i_tab> BY (sort_order_tab).
+
+      ENDIF.
+
+      "Prep output
+      DESCRIBE TABLE <i_tab> LINES numlines.
+
+      "Identify output column
+      fieldref = 'OUTPUT-FIELD'.
+
+      "Loop at itab
+      DO numlines TIMES.
+
+        CLEAR output.
+
+        "Assign record to field symbol
+        READ TABLE <i_tab> INDEX sy-index ASSIGNING <f1>.
+        numfields = 0.
+
+        "Extract component for our fields
+        LOOP AT field_list INTO wa_field.
+
+          "Strip out alias if there is one
+          SEARCH wa_field FOR '~'.
+          IF sy-subrc = 0.
+            length = strlen( wa_field ).
+            pointer = sy-fdpos + 1.
+            wa_field = wa_field+pointer(length).
+          ENDIF.
+
+          "Check column in our structure
+          numfields = numfields + 1.
+          IF numfields < 31.
+
+            "Component for our field
+            ASSIGN wa_field TO <f2>.
+            ASSIGN COMPONENT <f2> OF STRUCTURE <f1> TO <f3>.
+            fieldref+12 = numfields.
+            "Assign output column to field symbol
+            ASSIGN (fieldref) TO <f4>.
+
+            "Do conversion at the same time
+            LOOP AT conv_list INTO wa_conv WHERE field1 = wa_field.
+
+              CALL FUNCTION wa_conv-field2
+                EXPORTING
+                  input  = <f3>
+                IMPORTING
+                  output = <f3>.
+
+            ENDLOOP.
+
+            "Assign the value of our field to the output column
+            <f4> = <f3>.
+
+          ENDIF.
+
+        ENDLOOP.
+
+        IF exec_auth_check = 'X'.
+
+          IF left = 'CSKS'.
+
+            old_rc = 0.
+            new_rc = 0.
+            lv_kokrs = output-field7.
+            lv_kostl = output-field2.
+
+            CALL FUNCTION 'K_CSKS_AUTHORITY_CHECK'
+              EXPORTING
+                actvt               = '03'
+                kokrs               = lv_kokrs
+                kostl               = lv_kostl
+              IMPORTING
+                e_old_rc            = old_rc
+                e_new_rc            = new_rc
+              EXCEPTIONS
+                system_error        = 1
+                user_not_authorized = 2
+                OTHERS              = 3.
+            IF sy-subrc <> 0.
+              numfields = numfields + 1.
+              fieldref+12 = numfields.
+              ASSIGN (fieldref) TO <f4>.
+              <f4> = 'X'.
+            ENDIF.
+
+          ELSEIF left = 'CEPC'.
+
+            lv_kokrs = output-field1.
+            lv_prctr = output-field2.
+
+            CALL FUNCTION 'K_PCA_RESP_AUTHORITY_CHECK'
+              EXPORTING
+                i_kokrs             = lv_kokrs
+                i_prctr             = lv_prctr
+                i_vorgn             = 'STDT'
+                i_actvt             = '03'
+                i_no_dialog_message = 'X'
+              EXCEPTIONS
+                no_authority        = 1
+                data_missing        = 2
+                OTHERS              = 3.
+            IF sy-subrc <> 0.
+              numfields = numfields + 1.
+              fieldref+12 = numfields.
+              ASSIGN (fieldref) TO <f4>.
+              <f4> = 'X'.
+            ENDIF.
+
+          ENDIF.
+
+        ENDIF.
+
+        APPEND output.
+
+      ENDDO.
+
+      IF enhance_process = 'X'.
+
+        DATA: program TYPE string,
+              message TYPE string,
+              line TYPE string,
+              word TYPE string,
+              offset TYPE string,
+              shortdumpid TYPE string.
+
+        CALL FUNCTION '/EXCEL4AP/CON_GETDATA_1'
+          IMPORTING
+            prog        = program
+            msg         = message
+            lin         = line
+            wrd         = word
+            off         = offset
+            shortdumpid = shortdumpid
+          TABLES
+            input       = output
+            output      = output
+            code        = code.
+
+        IF message <> ''.
+          return-xl4afield = message.
+          APPEND return.
+          return-xl4afield = line.
+          APPEND return.
+          return-xl4afield = word.
+          APPEND return.
+          return-xl4afield = offset.
+          APPEND return.
+        ENDIF.
+
+      ENDIF.
+
+      "Catch errors and return description
+    CATCH cx_sy_create_data_error INTO oref.
+      return-xl4afield = oref->get_text( ).
+      APPEND return.
+    CATCH cx_sy_dynamic_osql_semantics INTO oref.
+      return-xl4afield = oref->get_text( ).
+      APPEND return.
+
+  ENDTRY.
+
+  "WAN Compress
+  IF wancompress > 0.
+    filler = wancompress - numlines.
+    IF filler > 0.
+      wa_compress-field1 = 'EXCEL4APPSWANCOM'.
+      DO filler TIMES.
+        APPEND wa_compress TO output.
+      ENDDO.
+    ENDIF.
+  ENDIF.
+
+  "Clear request tables
+  REFRESH field_list.
+  REFRESH cond_list.
+  REFRESH ord_list.
+  REFRESH conv_list.
+
+*}   INSERT
+
+
+
+ENDFUNCTION.

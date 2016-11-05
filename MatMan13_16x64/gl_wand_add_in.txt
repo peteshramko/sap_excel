@@ -1,0 +1,201 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui" onLoad="xxe4asapConnectorRibbon_Load">
+	<ribbon>
+		<tabs>
+			
+			<tab id="xxe4asapConnectorTab" label="Excel4apps (SAP)" keytip="SWC">
+				
+				<group id="xxe4asapConnectGroup" label="Connect" keytip="C">
+					<button id="xxe4asapConnectButton" label="Connect" size="large" onAction="xxe4asapConnectButton_onAction" image="e4awand_sap_32_logon" keytip="L" screentip="Log on to SAP" 
+							getVisible="xxe4asapConnectTrue" />
+					<button id="xxe4asapReconnectButton" label="Reconnect" size="large" onAction="xxe4asapConnectButton_onAction" image="e4awand_sap_32_logon" keytip="R" 
+							screentip="Log on to SAP" getVisible="xxe4asapConnectFalse" />
+				</group>
+
+				<group id="xxe4asapToolsGroup" label="Tools" keytip="T">
+                    		<button id="xxe4asapSnapshotButton" image="e4awand_sap_32_snapshot" keytip="S" screentip="Snapshot the current workbook" label="Snapshot" size="large" 												getEnabled="xxe4asapConnectFalse" onAction="xxe4asapSnapshotButton_onAction" />
+                    		<button id="xxe4asapUserOptionsButton" image="e4awand_sap_32_options" keytip="U" screentip="Set the Connector user options" label="User Options" size="large" 											getEnabled="xxe4asapConnectFalse" onAction="xxe4asapUserOptionsButton_onAction" />
+                		</group>
+
+                		<group id="xxe4asapHelpGroup" label="Help" keytip="H">
+                    		<button id="xxe4asapAboutButton" image="e4awand_sap_32_about" keytip="A" screentip="About information" label="About" size="large" onAction="xxe4asapAboutButton_onAction" />
+                    		<button id="xxe4asapHelpButton" image="e4awand_sap_32_help" keytip="H" screentip="Open the online help for the Excel4apps Connector" label="Help" size="large" 											onAction="xxe4asapHelpButton_onAction" />
+                		</group>
+
+                		<group id="xxe4asapAdministratorGroup" label="Administrator" keytip="A" getVisible="xxe4asapGetConnectorVisible" tag="Administrator">
+                    		<button id="xxe4asapSiteOptionsButton" image="e4awand_sap_32_options" keytip="SO" screentip="Set the site wide options" label="Site Options" size="large" 												onAction="xxe4asapSiteOptionsButton_onAction" />
+                    		<button id="xxe4asapManageUsersButton" image="e4awand_sap_32_manage_users" keytip="M" screentip="Manage the Wand Users" label="Manage Users" size="large" 												onAction="xxe4asapManageUsersButton_onAction" />
+                		</group>
+			</tab>
+
+			<tab id="xxe4asapGLWandTab" label="GL Wand (SAP)" keytip="GLW" getVisible="xxe4asapIsGLWUser">
+
+				<group id="xxe4asapObjectControlGroup" label="Object Control" keytip="OC">
+                    		<dropDown id="xxe4asapCompanyCodeDropDown" keytip="CC" screentip="Select the Company Code to work with" getLabel="xxe4asapGLWand_getLabel" getEnabled="xxe4asapGLWand_getEnabled" 								getItemCount="xxe4asapGetCompanyCodeItemCount" getItemID="xxe4asapGetCompanyCodeItemID" getItemLabel="xxe4asapGetCompanyCodeItemLabel" 														getSelectedItemIndex="xxe4asapGetSelectedCompanyCodeItemIndex" onAction="xxe4asapCompanyCode_OnAction" />
+                    		<dropDown id="xxe4asapFICOObjectDropDown" keytip="FO" screentip="Select the FICO object to work with" getLabel="xxe4asapGLWand_getLabel" getEnabled="xxe4asapGLWand_getEnabled" 								getItemCount="xxe4asapGetFICOObjectItemCount" getItemID="xxe4asapGetFICOObjectItemID" getItemLabel="xxe4asapGetFICOObjectItemLabel" 														getSelectedItemIndex="xxe4asapGetSelectedFICOObjectItemIndex" onAction="xxe4asapFICOObject_OnAction"  />
+     					<dropDown id="xxe4asapDiscoverObjectTypeDropDown" keytip="DO" screentip="Select the object type to work with" label="Object Type" getEnabled="xxe4asapGLWand_getEnabled" 									getItemCount="xxe4asapGetObjectTypeItemCount" getItemID="xxe4asapGetObjectTypeItemID" getItemLabel="xxe4asapGetObjectTypeItemLabel" 														getSelectedItemIndex="xxe4asapGetSelectedObjectTypeItemIndex" onAction="xxe4asapObjectType_OnAction"  />
+				</group>
+
+				<group id="xxe4asapDiscoverGroup" label="Discover" keytip="D">
+					<splitButton id="xxe4asapDiscoverSplitButton" keytip="DS" size="large" >
+                        	<button id="xxe4asapDiscoverSplitButton__btn" getImage="xxe4asapDiscoverButton_getImage" onAction="xxe4asapDiscoverButton_onAction" getScreentip="xxe4asapDiscoverButton_getScreentip" 							getLabel="xxe4asapDiscoverButton_getLabel" getEnabled="xxe4asapGLWand_getEnabled" />
+                        	<menu id="xxe4asapDiscoverSplitButton__mnu" keytip="DS" screentip="Discover." getEnabled="xxe4asapGLWand_getEnabled"  >
+ 					<button id="xxe4asapDownButton" image="e4awand_sap_32_discover_down" keytip="D" screentip="Discover the next FICO object down" label="Discover Down"  getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverMenu_OnAction"  />
+                    		<button id="xxe4asapRightButton" image="e4awand_sap_32_discover_right" keytip="R" screentip="Discover the next FICO object to the right" label="Discover Right" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverMenu_OnAction"   />
+                    		<button id="xxe4asapLeftButton" image="e4awand_sap_32_discover_left" keytip="L" screentip="Discover the next FICO object to the left" label="Discover Left" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverMenu_OnAction"  />
+                    		<button id="xxe4asapUpButton" image="e4awand_sap_32_discover_up" keytip="U" screentip="Discover the next FICO object up" label="Discover Up" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverMenu_OnAction"  />
+                              <button id="xxe4asapDownAllButton" image="e4awand_sap_32_discover_down_all" keytip="DA" screentip="Discover all the FICO objects down" label="Discover Down All" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverMenu_OnAction"   />
+                    		<button id="xxe4asapRightAllButton" image="e4awand_sap_32_discover_right_all" keytip="RA" screentip="Discover all the FICO objects to the right" label="Discover Right All"    getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverMenu_OnAction"   />
+                          	</menu>
+                    		</splitButton>
+                
+					<separator id="xxe4asapDiscoverHierarchySep" />
+
+					<button id="xxe4asapDiscoverHierarchyButton" image="e4awand_sap_32_expand" keytip="DH" screentip="Expand the Hierarchy of the FICO Group Object" label="Expand Hierarchy" size="large" 									getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapDiscoverHierarchy_onAction" />
+  					<checkBox id="xxe4asapParentsCheckBox" keytip="DP" screentip="Select to include Groups in the Expand Hierarchy" label="Parents" onAction="xxe4asapParents_onAction" 										getPressed="xxe4asapParents_getPressed" getEnabled="xxe4asapGLWand_getEnabled"  />
+                    		<checkBox id="xxe4asapChildrenCheckBox" keytip="DC" screentip="Select to include Children in the Expand Hierarchy" label="Children" onAction="xxe4asapChildren_onAction" 									getPressed="xxe4asapChildren_getPressed" getEnabled="xxe4asapGLWand_getEnabled" />
+					<checkBox id="xxe4asapExpandAllCheckBox" keytip="EA" screentip="Select to expand all levels in the Hierarchy" label="Expand All" onAction="xxe4asapExpandAll_onAction" 									getPressed="xxe4asapExpandAll_getPressed" getEnabled="xxe4asapGLWand_getEnabled" />
+                		</group>
+
+				<group id="xxe4asapLOVGroup" label="List of Values" keytip="LOV">
+                    		<button id="xxe4asapLOVShowButton" image="e4awand_sap_32_lov" keytip="SLV" screentip="Show the List of Values" label="Show" size="large" getEnabled="xxe4asapGLWand_getEnabled" 									onAction="xxe4asapShowLOV_onAction" />
+                    		<button id="xxe4asapCreateLOVButton" image="e4awand_sap_32_create_lov" keytip="CLV" screentip="Create a List of Values" label="Create" size="large" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapCreateLOV_onAction" />
+                		</group>
+
+				<group id="xxe4asapFunctionsGroup" label="Functions" keytip="F">
+ 					<splitButton id="xxe4asapFunctionsSplitButton" keytip="FX" size="large" >
+                        	<button id="xxe4asapFunctionsSplitButton__btn" getImage="xxe4asapFXButton_getImage" onAction="xxe4asapFXButton_onAction" getScreentip="xxe4asapFXButton_getScreentip" 										getLabel="xxe4asapFXButton_getLabel" getEnabled="xxe4asapGLWand_getEnabled" />
+                        	<menu id="xxe4asapFunctionsSplitButton__mnu" keytip="FX" screentip="Insert a function." getEnabled="xxe4asapGLWand_getEnabled"  >
+					<menuSeparator id="xxe4asapFI" title="Financial Accounting"/>                            
+					<button id="xxe4asapClassicGLButton" image="e4awand_sap_16_classicgl" keytip="CGL" screentip="Insert the Get Classic GL Balance function" label="Get Classic GL Balance" 										onAction="xxe4asapFXMenu_OnAction" />
+               			<button id="xxe4asapNewGLButton" image="e4awand_sap_16_newgl" keytip="NGL" screentip="Insert the Get NewGL Balance function" label="Get New GL Balance" 												getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapCustomNewGLButton" image="e4awand_sap_16_customgl" keytip="CGL" screentip="Insert the Get Custom NewGL Balance function" label="Get Custom New GL Balance" 									getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+<button id="xxe4asapGLDailyButton" image="e4awand_sap_16_dailygl" keytip="GLD" screentip="Insert the Daily GL Balance function" label="Get Daily GL Balance" 									getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+ 					<menuSeparator id="xxe4asapCO" title="Controlling"/>     
+					<button id="xxe4asapCCAButton" image="e4awand_sap_16_cca" keytip="CCA" screentip="Insert the Get CCA Balance function" label="Get CCA Balance" onAction="xxe4asapFXMenu_OnAction" />
+                            	<button id="xxe4asapPCAButton" image="e4awand_sap_16_pca" keytip="PCA" screentip="Insert the Get PCA Balance function" label="Get PCA Balance" onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapSKFButton" image="e4awand_sap_16_skf" keytip="SKF" screentip="Insert the SKF function" label="Get Statistical Key Figure Balance" 													getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapActivityTypeButton" image="e4awand_sap_16_activity" keytip="ACT" screentip="Insert the Activity Type function" label="Get Activity Type Balance" 										getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapOrderButton" image="e4awand_sap_16_order" keytip="ORD" screentip="Insert the Order function" label="Get Order Balance" getEnabled="xxe4asapGLWand_getEnabled" 								onAction="xxe4asapFXMenu_OnAction" />
+   					<button id="xxe4asapCOPAButton" image="e4awand_sap_16_pacb" keytip="CPA" screentip="Insert the COPA Balance function (Costing Based)" label="Get COPA Balance (Costing Based)" 										getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+ 					<menuSeparator id="xxe4asapPS" title="Project System"/>     
+					<button id="xxe4asapProjectButton" image="e4awand_sap_16_projects" keytip="PRJ" screentip="Insert the Project Balance function" label="Get Project Balance" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<menuSeparator id="xxe4asapPSM" title="Public Sector Management"/>     
+					<button id="xxe4asapFMButton" image="e4awand_sap_16_funds" keytip="FM" screentip="Insert the Funds Management Balance function" label="Get Funds Management Balance (New GL)" 								getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapClassicFMButton" image="e4awand_sap_16_classic_funds" keytip="CFM" screentip="Insert the Classic Funds Balance function" label="Get Classic Funds Balance" 									getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapClassicGMButton" image="e4awand_sap_16_classic_grants" keytip="CGM" screentip="Insert the Classic Grants Balance function" label="Get Classic Grants Balance" 								getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapBCSButton" image="e4awand_sap_16_bcs" keytip="BCS" screentip="Insert the Budget Control System (BCS) Balance function" label="Get BCS Balance" 											getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<menuSeparator id="xxe4asapDC" title="Customer / Vendor"/> 
+    					<button id="xxe4asapCustomerButton" image="e4awand_sap_16_customer" keytip="CUS" screentip="Insert the Customer Balance function" label="Get Customer Balance" 												getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapVendorButton" image="e4awand_sap_16_vendor" keytip="VEN" screentip="Insert the Vendor Balance function" label="Get Vendor Balance" 													getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<menuSeparator id="xxe4asapECCS" title="ECCS"/> 
+					<button id="xxe4asapECCSButton" image="e4awand_sap_16_eccs" keytip="CS" screentip="Insert the ECCS Balance function" label="Get ECCS Balance" getEnabled="xxe4asapGLWand_getEnabled" 								onAction="xxe4asapFXMenu_OnAction"  />
+					<menuSeparator id="xxe4asapSPL" title="SPL"/> 
+					<button id="xxe4asapSPLButton" image="e4awand_sap_16_spl" keytip="SPL" screentip="Insert the SPL Balance function" label="Get SPL Balance" getEnabled="xxe4asapGLWand_getEnabled" 								onAction="xxe4asapFXMenu_OnAction"  />
+    					<menuSeparator id="xxe4asapOT" title="Other"/> 
+					<menu id="xxe4asapObjectDescription" keytip="OD" screentip="Insert an object description function" getEnabled="xxe4asapGLWand_getEnabled" label="Object Description" 										image="e4awand_sap_16_description" >
+					<button id="xxe4asapDescriptionButton_Sub" image="e4awand_sap_16_description" keytip="D" screentip="Insert the Description function" label="Get FICO Object Description" 											onAction="xxe4asapFXMenu_OnAction" getEnabled="xxe4asapGLWand_getEnabled"  />
+					<button id="xxe4asapECCSDescriptionButton" image="e4awand_sap_16_description" keytip="CD" screentip="Insert the ECCS Description function" label="Get ECCS Object Description" 										getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapSPLDescriptionButton" image="e4awand_sap_16_description" keytip="SP" screentip="Insert the SPL Description function" label="Get SPL Object Description" 										getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					<button id="xxe4asapCOPA_CBDescriptionButton" image="e4awand_sap_16_description" keytip="CB" screentip="Insert the COPA (CB) Description function" label="Get COPA (CB) Object Description" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapFXMenu_OnAction"  />
+					</menu>
+					<menu id="xxe4asapNextObject" keytip="NX" screentip="Insert a next object function" getEnabled="xxe4asapGLWand_getEnabled" label="Next Object" image="e4awand_sap_16_next_object"  >
+					<button id="xxe4asapNextObjectButton" image="e4awand_sap_16_next_object" keytip="NO" screentip="Insert the Next FICO Object function" label="Next FICO Object" onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapNextECCSObjectButton" image="e4awand_sap_16_next_object" keytip="NE" screentip="Insert the Next ECCS Object function" label="Next ECCS Object" 		onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapNextSPLObjectButton" image="e4awand_sap_16_next_object" keytip="NS" screentip="Insert the Next SPL Object function" label="Next SPL Object" onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapNextCOPA_CBObjectButton" image="e4awand_sap_16_next_object" keytip="NC" screentip="Insert the Next COPA (CB) Object function" label="Next COPA (CB) Object" 		onAction="xxe4asapFXMenu_OnAction" />
+ 					</menu>
+                              <button id="xxe4asapPreviousObjectButton" image="e4awand_sap_16_previous_object" keytip="PO" screentip="Insert the Previous FICO Object function" label="Previous FICO Object" 	onAction="xxe4asapFXMenu_OnAction" />
+                              <button id="xxe4asapCompanyCodeNameButton" image="e4awand_sap_16_company_code" keytip="CCN" screentip="Insert the Company Code Name function" label="Company Code Name" 			onAction="xxe4asapFXMenu_OnAction" />
+ 					<button id="xxe4asapGetAlternateAccountButton" image="e4awand_sap_16_alternate_account" keytip="AA" screentip="Insert the Get Alternate Account function" label="Alternate Account" 	onAction="xxe4asapFXMenu_OnAction" />
+					<button id="xxe4asapExchangeRateButton" image="e4awand_sap_16_daily_rate" keytip="ER" screentip="Insert the Exchange Rate function" label="Exchange Rate" onAction="xxe4asapFXMenu_OnAction" />
+                        	</menu>
+                    		</splitButton>
+					<button id="xxe4asapDescriptionButton" image="e4awand_sap_32_description" keytip="D" screentip="Insert the Description function" size="large" label="FICO Object Description" 										onAction="xxe4asapGetDescription_OnAction" getEnabled="xxe4asapGLWand_getEnabled"  />
+    				</group>
+
+				<group id="xxe4asapCalculationGroup" label="Calculation">
+					<splitButton id="xxe4asapRefreshSplitButton" keytip="RF" size="large" >
+                        	<button id="xxe4asapRefreshSplitButton__btn" getImage="xxe4asapRefreshButton_getImage" onAction="xxe4asapRefreshButton_onAction" getScreentip="xxe4asapRefreshButton_getScreentip" 								getLabel="xxe4asapRefreshButton_getLabel" getEnabled="xxe4asapGLWand_getEnabled" />
+                        	<menu id="xxe4asapRefreshSplitButton__mnu" keytip="RF" screentip="Refresh the calculations" getEnabled="xxe4asapGLWand_getEnabled"  >
+                    		<button id="xxe4asapRangeButton" image="e4awand_sap_32_range"   keytip="RNG" screentip="Refresh a Range of calculations" label="Range" onAction="xxe4asapRefreshFunction_OnAction"   />
+                    		<button id="xxe4asapSheetButton" image="e4awand_sap_32_sheet"   keytip="SHT" screentip="Refresh the current Sheet calculations" label="Sheet" onAction="xxe4asapRefreshFunction_OnAction"   />
+					<button id="xxe4asapWorkbookButton" image="e4awand_sap_32_workbook"   keytip="WKB" screentip="Refresh All sheets in the current Workbook" label="Workbook"  					onAction="xxe4asapRefreshFunction_OnAction"   />
+                    		<button id="xxe4asapAllSheetsButton" image="e4awand_sap_32_all"   keytip="ALL" screentip="Refresh All sheets in All Workbooks" label="All Workbooks" 						onAction="xxe4asapRefreshFunction_OnAction" />
+  					</menu>
+                    		</splitButton>
+                    		<button id="xxe4asapToggleCalcButton" getImage="xxe4asapToggleCalc_getImage"   keytip="TC" getScreentip="xxe4asapToggleCalc_getScreentip" getLabel="xxe4asapToggleCalc_getLabel" 								size="large" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapToggleCalc_OnAction" />
+                		</group>
+
+				<group id="xxe4asapAnalysis" label="Analysis" keytip="AN">
+                     		<button id="xxe4asapDrillDown" image="e4awand_sap_32_drill"   keytip="DD" screentip="Drill to detail" label="Drill Down" size="large" getEnabled="xxe4asapGLWand_getEnabled" 											onAction="xxe4asapDrillDown_OnAction"   />
+                		</group>
+
+                		<group id="xxe4asapGLWToolsGroup" label="Tools" keytip="T">
+                    		<button id="xxe4asapLayoutsButton" image="e4awand_sap_32_edit_layout" keytip="LT" screentip="Design your displayed layouts" label="Layouts" size="large" getEnabled="xxe4asapGLWand_getEnabled" 							onAction="xxe4asapLayouts_onAction"  />
+					<button id="xxe4asapUserSettingsButton" image="e4awand_sap_32_options" keytip="US" screentip="Select your GL Wand user settings" label="User Settings" getEnabled="xxe4asapGLWand_getEnabled" 								onAction="xxe4asapGLWandUserOptions_onAction"  />
+					<button id="xxe4asapConfigurationSheet" image="e4awand_sap_32_config_sheet" keytip="CS" screentip="Create a configuration sheet" label="Configuration Sheet" 												getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapConfigurationSheet_onAction"  />
+					<button id="xxe4asapHelp" image="e4awand_sap_32_help" keytip="H" screentip="Open the online help for GL Wand" label="Help" onAction="xxe4asapHelp_onAction"  />
+					<button id="xxe4asapHideZeros" image="e4awand_sap_32_hide_zeros" keytip="Z" screentip="Hide zeros" label="Hide Zeros" getEnabled="xxe4asapGLWand_getEnabled" onAction="xxe4asapHideZeros_onAction"  />
+                		</group>
+
+			</tab>
+
+<tab id="xxe4asapPWTab" label="Planning Wand (SAP)" getVisible="xxe4asapIsPWUser">
+                <group id="xxe4asapPWFunctionGroup" label="Insert Function">
+                    <button id="xxe4asapPWPostCostButton" label="Load Cost Plan" size="large" 
+                            image="e4awand_sap_32_loadcostplan"
+                            screentip="Open the Planning Wand Load Cost plan wizard" getEnabled="xxe4asapPWand_getEnabled"
+                            onAction="xxe4asapCostPlanClick" />
+                    <button id="xxe4asapPWPostNewGLButton" label="Load NewGL Plan" size="large" 
+                            image="e4awand_sap_32_loadnewglplan"
+                            screentip="Open the Planning Wand Load NewGL plan wizard" getEnabled="xxe4asapPWand_getEnabled"
+                            onAction="xxe4asapNewGLPlanClick" />
+                    <button id="xxe4asapPWPostActivityButton" label="Load Activity Plan" size="large" 
+                            image="e4awand_sap_32_loadactivityplan"
+                            screentip="Open the Planning Wand Load Activity plan wizard" getEnabled="xxe4asapPWand_getEnabled"
+                            onAction="xx4asapActivityPlanClick" />
+                   <button id="xxe4asapPWPostPCAButton" label="Load PCA Plan" size="large" 
+                            image="e4awand_sap_32_loadpcaplan"
+                            screentip="Open the Planning Wand Load PCA plan wizard" getEnabled="xxe4asapPWand_getEnabled"
+                            onAction="xx4asapPCAPlanClick" />  
+                </group>
+                <group id="xxe4asapPWActionGroup" label="Upload Options">
+                    <dropDown id="xxe4asapPWActionDropDown" label="Upload Options" showImage="false"
+                              getEnabled="xxe4asapPWand_getEnabled" getSelectedItemID="xxe4asapPWActionDropDown_GetSelectedItemID" 
+                              onAction="xxe4asapPWActionDropDown_OnAction">
+                        <item id="xxe4asapValidateOnly" label="Validate Only" />
+                        <item id="xxe4asapValidateAndPost" label="Validate and Post" />
+                    </dropDown>
+                </group>                
+                <group id="xxe4asapPWLoadGroup" label="Upload Plan Values">
+                    <button id="xxe4asapPWLoadRangeBtn" label="Range" size="large"
+                            image="e4awand_sap_32_load_range"
+                            screentip="Load Range of functions into SAP"
+                            getEnabled="xxe4asapPWand_getEnabled" onAction="xxe4asapPWLoadRangeButtonClick" />
+                    <button id="xxe4asapPWLoadSheetBtn" label="Sheet" size="large"
+                            image="e4awand_sap_32_load_sheet"
+				    screentip="Load the current Sheet of functions into SAP"
+                            getEnabled="xxe4asapPWand_getEnabled" onAction="xxe4asapPWLoadSheetButtonClick" />
+                    <button id="xxe4asapPWLoadWorkbookBtn" label="Workbook" size="large"
+                            image="e4awand_sap_32_load_workbook"
+				    screentip="Load the current Workbook of functions into SAP"
+                            getEnabled="xxe4asapPWand_getEnabled" onAction="xxe4asapPWLoadWorkbookButtonClick" />
+                </group>
+                <group id="xxe4asapuserOptionsGroup" label="Tools">
+                   <button id="xxe4asapPWUserOptionsButton" label="Options" size="large" 
+                            image="e4awand_sap_32_options"
+                            screentip="User Options" getEnabled="xxe4asapPWand_getEnabled"
+                            onAction="xxe4asapPWUserOptionsClick" />
+			 <button id="xxe4asapPWShowHelpButton" label="Help" size="large" 
+                            image="e4awand_sap_32_help"
+                            screentip="Open the online help for Planning Wand" onAction="xxe4asapPWHelpMenuClick" />
+
+                </group>
+            </tab>
+
+
+
+
+		</tabs>
+	</ribbon>
+</customUI>

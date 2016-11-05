@@ -1,0 +1,200 @@
+FUNCTION bapi_po_get_list.                                  "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(REL_GROUP) LIKE  BAPIMMPARA-REL_GROUP OPTIONAL
+*"     VALUE(REL_CODE) LIKE  BAPIMMPARA-REL_CODE OPTIONAL
+*"     VALUE(ITEMS_FOR_RELEASE) LIKE  BAPIMMPARA-SELECTION DEFAULT 'X'
+*"  TABLES
+*"      PO_HEADERS STRUCTURE  BAPIEKKO
+*"      PO_ADDRESSES STRUCTURE  BAPIEKAN OPTIONAL
+*"      PO_ADDRESSES_NEW STRUCTURE  BAPIADDRESS OPTIONAL
+*"      PO_ITEMS STRUCTURE  BAPIEKPO
+*"      RETURN STRUCTURE  BAPIRETURN OPTIONAL
+*"  EXCEPTIONS
+*"      REL_CODE_MISSING
+*"      REL_AUTHORITY_CHECK_FAILED
+*"----------------------------------------------------------------------
+ENHANCEMENT-POINT bapi_po_get_list_g8 SPOTS es_saplmewp STATIC.
+*$*$-Start: BAPI_PO_GET_LIST_G8-----------------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_PO_GET_LIST.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GET_LIST_G8-----------------------------------------------------------------$*$*
+
+ENHANCEMENT-POINT bapi_po_get_list_g6 SPOTS es_saplmewp.
+*$*$-Start: BAPI_PO_GET_LIST_G6-----------------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_PO_GET_LIST.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050216
+T_MGV_FNAMES1-INT = 'PUR_MAT'.
+T_MGV_FNAMES1-EXT = 'PUR_MAT_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'PUR_MAT_VERSION'.
+T_MGV_FNAMES1-GUID = 'PUR_MAT_GUID'.
+APPEND T_MGV_FNAMES1.
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+T_MGV_FNAMES1-INT = 'CONF_MATL'.
+T_MGV_FNAMES1-EXT = 'CONF_MATL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'CONF_MATL_VERSION'.
+T_MGV_FNAMES1-GUID = 'CONF_MATL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GET_LIST_G6-----------------------------------------------------------------$*$*
+  DATA: h_ktwrt LIKE ekko-ktwrt.
+  CLEAR: return.
+  REFRESH: return.
+
+* reset internal structures and tables
+  CLEAR: po_headers, sekko.
+  REFRESH: po_headers, sekko.
+  CLEAR: po_addresses, sekan, cadr.
+  REFRESH: po_addresses, sekan.
+  CLEAR: po_addresses_new.
+  REFRESH: po_addresses_new.
+  CLEAR: po_items, sekpo.
+  REFRESH: po_items, sekpo.
+
+* releasegroup is missing
+  IF rel_group IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                            USING  'E'
+                                   'W5'
+                                   '113'
+                                   space
+                                   space
+                                   space
+                                   space.
+    IF 1 = 2. MESSAGE e113(w5). ENDIF.
+    EXIT.
+  ENDIF.
+
+* releasecode is missing
+  IF NOT rel_group IS INITIAL AND
+         rel_code IS INITIAL.
+    PERFORM fill_bapireturn TABLES return
+                        USING 'E'
+                              'W5'
+                              '111'
+                              space
+                              space
+                              space
+                              space.
+    IF 1 EQ 2.                         "where used list of messages
+      MESSAGE e111 RAISING rel_code_missing.     "aufwärtkompatibel
+    ENDIF.
+    EXIT.
+  ENDIF.
+
+* authority check for release group and release code
+  PERFORM rel_po_authority_check TABLES return
+                                 USING rel_group rel_code 'X'.
+  CHECK no_authority EQ space.
+
+* determine relevant strategies
+  PERFORM strategies USING rel_code.
+
+* read relevant po headers
+  IF NOT zus[] IS INITIAL.
+    IF NOT items_for_release IS INITIAL.
+      SELECT * FROM ekko APPENDING TABLE sekko
+                         FOR ALL ENTRIES IN zus
+                         WHERE frgrl EQ 'X'
+                           AND frggr EQ zus-frggr
+                           AND frgsx EQ zus-frgst
+                           AND bstyp EQ 'F'
+                           AND loekz EQ space.
+    ELSE.
+      SELECT * FROM ekko APPENDING TABLE sekko
+                         FOR ALL ENTRIES IN zus
+                         WHERE frggr EQ zus-frggr
+                           AND frgsx EQ zus-frgst
+                           AND bstyp EQ 'F'
+                           AND loekz EQ space.
+    ENDIF.
+*  check prerequisites
+    PERFORM po_prerequisites TABLES sekko USING items_for_release.
+  ENDIF.
+
+  SORT sekko BY ebeln.
+
+* fill internal header data into the external structure PO_HEADERS
+  LOOP AT sekko.
+    PERFORM sekko_to_po_headers_old TABLES po_headers
+                                           po_addresses_new
+                                           sekko
+                                           sekan.
+    kekko-ebeln = sekko-ebeln.
+    APPEND kekko.
+  ENDLOOP.
+
+  SORT kekko.
+
+* read po items
+  IF NOT kekko[] IS INITIAL.
+    SELECT * FROM ekpo APPENDING TABLE sekpo
+                       FOR ALL ENTRIES IN kekko
+                       WHERE ebeln EQ kekko-ebeln.
+  ENDIF.
+
+* fill internal item data into external format
+  CLEAR h_ktwrt.
+  CLEAR h_target_val.
+  LOOP AT sekpo.
+    IF sekpo-ebeln NE h_ebeln AND
+       h_ebeln NE space.
+      READ TABLE sekko WITH KEY ebeln = h_ebeln BINARY SEARCH.
+      PERFORM value_to_external USING h_ktwrt sekko-waers
+                                      h_target_val.
+      READ TABLE po_headers WITH KEY po_number = h_ebeln BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        po_headers-target_val = h_target_val.
+        MODIFY po_headers INDEX sy-tabix.
+      ENDIF.
+      CLEAR h_ktwrt.
+      CLEAR h_target_val.
+    ENDIF.
+    CLEAR: po_items.                                        "n_1078712
+    PERFORM sekpo_to_po_items_old TABLES sekpo
+                                         po_items
+                                         po_headers.
+    h_ktwrt = h_ktwrt + sekpo-netwr.
+    h_ebeln = sekpo-ebeln.
+  ENDLOOP.
+  PERFORM value_to_external USING h_ktwrt sekko-waers
+                                  h_target_val.
+  READ TABLE po_headers WITH KEY po_number = h_ebeln BINARY SEARCH.
+  IF sy-subrc EQ 0.
+    po_headers-target_val = h_target_val.
+    MODIFY po_headers INDEX sy-tabix.
+  ENDIF.
+
+  SORT po_headers BY po_number.
+  SORT po_items BY po_number po_item.
+
+ENHANCEMENT-POINT bapi_po_get_list_g7 SPOTS es_saplmewp.
+*$*$-Start: BAPI_PO_GET_LIST_G7-----------------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_PO_GET_LIST.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_GET_LIST_G7-----------------------------------------------------------------$*$*
+ENDFUNCTION.

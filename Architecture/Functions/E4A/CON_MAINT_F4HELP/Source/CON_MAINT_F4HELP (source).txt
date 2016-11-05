@@ -1,0 +1,56 @@
+FUNCTION /excel4ap/con_maint_f4help.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(DELETE) TYPE  CHAR01 OPTIONAL
+*"  TABLES
+*"      SEARCHHELPS STRUCTURE  /EXCEL4AP/CON_F4
+*"  EXCEPTIONS
+*"      UPDATE_ERROR
+*"----------------------------------------------------------------------
+
+  DATA: ls_shlp     TYPE          /excel4ap/con_f4,
+        lt_shlp     TYPE TABLE OF /excel4ap/con_f4,
+        lt_shlp_del TYPE TABLE OF /excel4ap/con_f4.
+
+  FIELD-SYMBOLS: <shlp> TYPE /excel4ap/con_f4.
+
+  ls_shlp-changed = sy-datum.
+  ls_shlp-username = sy-uname.
+
+  LOOP AT searchhelps ASSIGNING <shlp>.
+    ls_shlp-fieldname       = <shlp>-fieldname.
+    ls_shlp-tablename       = <shlp>-tablename.
+    ls_shlp-desc_fieldname       = <shlp>-desc_fieldname.
+    ls_shlp-desc_tablename       = <shlp>-desc_tablename.
+    ls_shlp-desc_textfield       = <shlp>-desc_textfield.
+    ls_shlp-desc_lang_field       = <shlp>-desc_lang_field.
+
+    IF delete = 'X'.
+      APPEND ls_shlp TO lt_shlp_del.
+    ELSE.
+      APPEND ls_shlp TO lt_shlp.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_shlp IS NOT INITIAL.
+    MODIFY /excel4ap/con_f4 FROM TABLE lt_shlp.
+    IF sy-subrc EQ 0.
+      COMMIT WORK.
+    ELSE.
+      ROLLBACK WORK.
+      RAISE update_error.
+    ENDIF.
+  ENDIF.
+
+  IF lt_shlp_del IS NOT INITIAL.
+    DELETE /excel4ap/con_f4 FROM TABLE lt_shlp_del.
+    IF sy-subrc EQ 0.
+      COMMIT WORK.
+    ELSE.
+      ROLLBACK WORK.
+      RAISE update_error.
+    ENDIF.
+  ENDIF.
+
+ENDFUNCTION.

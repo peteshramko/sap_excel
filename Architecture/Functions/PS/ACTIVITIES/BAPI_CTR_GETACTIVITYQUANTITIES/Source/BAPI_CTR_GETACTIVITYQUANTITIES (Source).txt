@@ -1,0 +1,69 @@
+FUNCTION BAPI_CTR_GETACTIVITYQUANTITIES.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(COAREA) LIKE  BAPI0012_6-CO_AREA
+*"     VALUE(FISCYEAR) LIKE  BAPI0012_6-FISC_YEAR
+*"     VALUE(VERSION) LIKE  BAPI0012_6-VERSION DEFAULT '000'
+*"     VALUE(COSTCENTERFROM) LIKE  BAPI0012_6-COSTCENTER OPTIONAL
+*"     VALUE(COSTCENTERTO) LIKE  BAPI0012_6-COSTCENTER OPTIONAL
+*"     VALUE(COSTCENTERGRP) LIKE  BAPI0012_6-COST_CENTER_GRP OPTIONAL
+*"     VALUE(ACTTYPEFROM) LIKE  BAPI0012_6-ACTTYPE OPTIONAL
+*"     VALUE(ACTTYPETO) LIKE  BAPI0012_6-ACTTYPE OPTIONAL
+*"     VALUE(PERIODFROM) LIKE  BAPI0012_6-PERIOD OPTIONAL
+*"     VALUE(PERIODTO) LIKE  BAPI0012_6-PERIOD OPTIONAL
+*"  TABLES
+*"      RETURN STRUCTURE  BAPIRET2
+*"      ACTQUANTITIES STRUCTURE  BAPI0012_ACTQUANTITIES
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+DATA: LT_OBJNR         TYPE IONRB OCCURS 0 WITH HEADER LINE,
+      LD_ERROR_OCCURED TYPE C,
+      LD_INPUT         TYPE INPUT_STRUC.
+
+* validate KOKRS, GJAHR, VERSN and fill structure ld_input
+  PERFORM CHECK_INPUT TABLES RETURN
+                       USING COAREA
+                             VERSION
+                             FISCYEAR
+                             COSTCENTERGRP
+                             COSTCENTERFROM
+                             COSTCENTERTO
+                             ACTTYPEFROM
+                             ACTTYPETO
+                    CHANGING LD_INPUT
+                             LD_ERROR_OCCURED.
+
+IF NOT LD_ERROR_OCCURED IS INITIAL.
+  EXIT.
+ENDIF.
+
+* validate Periods
+  PERFORM CHECK_PERIODS TABLES RETURN
+                         USING PERIODFROM
+                               PERIODTO
+                      CHANGING LD_INPUT
+                               LD_ERROR_OCCURED.
+
+  IF NOT LD_ERROR_OCCURED IS INITIAL.
+    EXIT.
+  ENDIF.
+
+* get all selected costcenters/activitytypes with Authority Check
+  PERFORM GET_ALLOWED_OBJECTS TABLES LT_OBJNR
+                                     RETURN
+                               USING LD_INPUT.
+
+  IF NOT LT_OBJNR[] IS INITIAL.
+*   fill controldata
+    PERFORM FILL_ACTQUANTITIES TABLES RETURN
+                                      LT_OBJNR
+                                      ACTQUANTITIES
+                               USING  LD_INPUT.
+  ELSE.
+    PERFORM ERROR_NO_SELECTION TABLES RETURN.
+  ENDIF.
+
+ENDFUNCTION.

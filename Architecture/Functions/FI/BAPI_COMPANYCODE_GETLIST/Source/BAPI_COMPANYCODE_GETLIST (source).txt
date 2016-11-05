@@ -1,0 +1,41 @@
+FUNCTION BAPI_COMPANYCODE_GETLIST.
+*"----------------------------------------------------------------------
+*"*"Local interface:
+*"       EXPORTING
+*"             VALUE(RETURN) LIKE  BAPIRETURN STRUCTURE  BAPIRETURN
+*"       TABLES
+*"              COMPANYCODE_LIST STRUCTURE  BAPI0002_1
+*"----------------------------------------------------------------------
+
+  CLEAR COMPANYCODE_LIST.    REFRESH COMPANYCODE_LIST.
+  CLEAR LM_COMPANYCODE_LIST. REFRESH LM_COMPANYCODE_LIST.
+  CLEAR RETURN.
+  CLEAR T001.
+
+* authority check: S_TABU_DIS V_T011
+  PERFORM CHECK_AUTHORITY_T001 CHANGING RETURN.
+  CHECK RETURN IS INITIAL.
+
+  SELECT * FROM T001.
+     LM_COMPANYCODE_LIST-COMP_CODE = T001-BUKRS.
+     LM_COMPANYCODE_LIST-COMP_NAME = T001-BUTXT.
+     APPEND LM_COMPANYCODE_LIST.
+  ENDSELECT.
+
+  IF SY-SUBRC NE 0.
+    CLEAR MESSAGE.
+    MESSAGE-MSGTY = 'E'.
+    MESSAGE-MSGID = 'FN'.
+    MESSAGE-MSGNO = 022.
+    PERFORM SET_RETURN_MESSAGE USING    MESSAGE
+                               CHANGING RETURN.
+    IF 1 = 2.    " Für Verwendungsnachweis Messages
+      MESSAGE E022(FN).
+*     Es sind keine Buchungskreise vorhanden
+    ENDIF.
+  ENDIF.
+  CHECK RETURN IS INITIAL.
+
+  COMPANYCODE_LIST[] = LM_COMPANYCODE_LIST[].
+  SORT COMPANYCODE_LIST.
+ENDFUNCTION.

@@ -1,0 +1,53 @@
+FUNCTION BAPI_NETWORK_MAINTAIN.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       EXPORTING
+*"             VALUE(RETURN) LIKE  BAPIRETURN1 STRUCTURE  BAPIRETURN1
+*"       TABLES
+*"              I_METHOD_PROJECT STRUCTURE  BAPI_METHOD_PROJECT
+*"              I_NETWORK STRUCTURE  BAPI_NETWORK OPTIONAL
+*"              I_NETWORK_UPDATE STRUCTURE  BAPI_NETWORK_UPDATE
+*"                             OPTIONAL
+*"              I_ACTIVITY STRUCTURE  BAPI_NETWORK_ACTIVITY OPTIONAL
+*"              I_ACTIVITY_UPDATE STRUCTURE  BAPI_NETWORK_ACTIVITY_UP
+*"                             OPTIONAL
+*"              I_RELATION STRUCTURE  BAPI_NETWORK_RELATION OPTIONAL
+*"              I_RELATION_UPDATE STRUCTURE  BAPI_NETWORK_RELATION_UP
+*"                             OPTIONAL
+*"              E_MESSAGE_TABLE STRUCTURE  BAPI_METH_MESSAGE OPTIONAL
+*"              I_ACTIVITY_ELEMENT STRUCTURE  BAPI_ACT_ELEMENT
+*"                             OPTIONAL
+*"              I_ACTIVITY_ELEMENT_UPDATE
+*"                             STRUCTURE  BAPI_ACT_ELEMENT_UPD
+*"                             OPTIONAL
+*"              I_ACTIVITY_MILESTONE STRUCTURE  BAPI_ACT_MILESTONE
+*"                             OPTIONAL
+*"              I_ACTIVITY_MILESTONE_UPDATE
+*"                             STRUCTURE  BAPI_ACT_MILESTONE_UPD
+*"                             OPTIONAL
+*"----------------------------------------------------------------------
+
+* this function wrapps the BAPI call, to provide a cleared work area
+
+    EXPORT: I_METHOD_PROJECT  TO MEMORY ID 'NW_MAIN_I_METHOD_PROJECT',
+            I_NETWORK         TO MEMORY ID 'NW_MAIN_I_NETWORK',
+            I_NETWORK_UPDATE  TO MEMORY ID 'NW_MAIN_I_NETWORK_UPDATE',
+            I_ACTIVITY        TO MEMORY ID 'NW_MAIN_I_ACTIVITY',
+            I_ACTIVITY_UPDATE TO MEMORY ID 'NW_MAIN_I_ACTIVITY_UPDATE',
+            I_RELATION        TO MEMORY ID 'NW_MAIN_I_RELATION',
+            I_RELATION_UPDATE TO MEMORY ID 'NW_MAIN_I_RELATION_UPDATE',
+            I_ACTIVITY_ELEMENT
+               TO MEMORY ID 'I_ACTIVITY_ELEMENT',
+            I_ACTIVITY_ELEMENT_UPDATE
+               TO MEMORY ID 'I_ACTIVITY_ELEMENT_UPDATE',
+            I_ACTIVITY_MILESTONE
+               TO MEMORY ID 'I_ACTIVITY_MILESTONE',
+            I_ACTIVITY_MILESTONE_UPDATE
+               TO MEMORY ID 'I_ACTIVITY_MILESTONE_UPDATE'.
+
+    SUBMIT R_BAPI_NETWORK_MAINTAIN AND RETURN.
+
+    IMPORT: RETURN            FROM MEMORY ID 'NW_MAIN_RETURN',
+            E_MESSAGE_TABLE   FROM MEMORY ID 'NW_MAIN_E_MESSAGE_TABLE'.
+
+ENDFUNCTION.

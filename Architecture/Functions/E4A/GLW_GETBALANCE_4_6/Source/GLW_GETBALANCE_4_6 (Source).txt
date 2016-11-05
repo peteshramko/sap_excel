@@ -1,0 +1,1562 @@
+FUNCTION /excel4ap/glw_getbalance_4_6.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(AUTOSPLIT) TYPE  CHAR1
+*"     VALUE(CCODESPLIT) TYPE  INTEGER
+*"     VALUE(FICOSPLIT) TYPE  INTEGER
+*"  TABLES
+*"      BATCHTABLE STRUCTURE  /EXCEL4AP/BALANCEREQ_2
+*"      STABNAME STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      FIELD_LIST STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      COND_LIST STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      GROUP_LIST STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      PERIODS STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      COMPANYCODE STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      ACCOUNTS STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      BALRESULTTABLE STRUCTURE  /EXCEL4AP/BALANCERET_1
+*"      BUSAREA STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      COSTCENTRE STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      PROFCENTRE STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      SEGMENT STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      FUNCAREA STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      COSTELEM STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER1 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      IORDER STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      ACTIVITY STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      SKF STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      RETURN STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      USER2 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER3 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER4 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER5 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER6 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER7 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER8 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER9 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER10 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER11 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER12 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER13 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER14 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER15 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      USER16 STRUCTURE  /EXCEL4AP/KEY_SELOPT
+*"      FUNCTIONTYPE STRUCTURE  /EXCEL4AP/KEY_LIST_STRUCT
+*"      CUST1 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST2 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST3 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST4 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST5 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST6 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST7 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST8 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST9 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST10 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST11 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST12 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST13 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST14 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"      CUST15 STRUCTURE  /EXCEL4AP/KEY_SELOPT OPTIONAL
+*"----------------------------------------------------------------------
+
+*{   INSERT         DEVK900071                                        1
+
+
+*
+* Excel4Apps batch balance request - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 1.20.00
+* Added custom fields
+* 3.0 Changes: Added more USER parameters
+* 4.13 Projects performance improvement and NWA elements added
+* Added COPA support
+
+*Declarations
+  DATA: totbal TYPE bapisaldo, balance TYPE bapisaldo,
+        wa_stabname TYPE /excel4ap/key_list_struct,
+        wa_cond_list TYPE /excel4ap/key_list_struct,
+        wa_field_list TYPE /excel4ap/key_list_struct,
+        wa_group_list TYPE /excel4ap/key_list_struct,
+        wa_periods TYPE /excel4ap/key_list_struct,
+        wa_selopt TYPE selopt,
+        ta_cond_list TYPE TABLE OF /excel4ap/text50,
+        ta_field_list TYPE TABLE OF /excel4ap/text50,
+        ta_group_list TYPE TABLE OF /excel4ap/text50,
+        ta_periods TYPE TABLE OF /excel4ap/text50,
+        ta_accounts TYPE  /excel4ap/selopt_table,
+        ta_companycode TYPE /excel4ap/selopt_table,
+        ta_busarea TYPE /excel4ap/selopt_table,
+        ta_costcentre TYPE /excel4ap/selopt_table,
+        ta_profcentre TYPE /excel4ap/selopt_table,
+        ta_funcarea TYPE /excel4ap/selopt_table,
+        ta_segment TYPE /excel4ap/selopt_table,
+        ta_costelem TYPE /excel4ap/selopt_table,
+        ta_user1 TYPE /excel4ap/selopt_table,
+        ta_user2 TYPE /excel4ap/selopt_table,
+        ta_user3 TYPE /excel4ap/selopt_table,
+        ta_user4 TYPE /excel4ap/selopt_table,
+        ta_user5 TYPE /excel4ap/selopt_table,
+        ta_user6 TYPE /excel4ap/selopt_table,
+        ta_user7 TYPE /excel4ap/selopt_table,
+        ta_user8 TYPE /excel4ap/selopt_table,
+        ta_user9 TYPE /excel4ap/selopt_table,
+        ta_user10 TYPE /excel4ap/selopt_table,
+        ta_user11 TYPE /excel4ap/selopt_table,
+        ta_user12 TYPE /excel4ap/selopt_table,
+        ta_user13 TYPE /excel4ap/selopt_table,
+        ta_user14 TYPE /excel4ap/selopt_table,
+        ta_user15 TYPE /excel4ap/selopt_table,
+        ta_user16 TYPE /excel4ap/selopt_table,
+        ta_iorder TYPE /excel4ap/selopt_table,
+        ta_activity TYPE /excel4ap/selopt_table,
+        ta_skf TYPE /excel4ap/selopt_table,
+        counter TYPE i,
+        totcounter TYPE i,
+        error TYPE string,
+        wa_functiontype TYPE /excel4ap/key_list_struct,
+        functionname(30),
+        projecttype(30),
+        cumulative(1),
+        network_number_low LIKE aufk-aufnr,
+        network_number_high LIKE aufk-aufnr,
+        activity_number_low(4),
+        activity_number_high(4),
+        wa_order LIKE aufk-aufnr,
+        operation_in_order LIKE afvc,
+        project_number_low LIKE proj-pspnr,
+        project_number_high LIKE proj-pspnr,
+        wbs_number_low LIKE prps-pspnr,
+        wbs_number_high LIKE prps-pspnr,
+        wbs_info LIKE prps,
+        ps_object_list TYPE TABLE OF objlist_ps,
+        ps_object LIKE objlist_ps,
+        ps_object_list_high TYPE TABLE OF objlist_ps,
+        ps_rech_tab TYPE TABLE OF ionre,
+        ps_wbs_hierarchy_tab TYPE TABLE OF rcj_pspnr2,
+        it_activity_list TYPE TABLE OF bapi_activity_list,
+        it_actelement_list TYPE TABLE OF bapi_actelement_list,
+        et_activity_elements TYPE TABLE OF bapi_bus2002_actelem_detail,
+        et_return TYPE TABLE OF bapiret2,
+        wa_actelement TYPE bapi_bus2002_actelem_detail,
+        wa_activitylist TYPE bapi_activity_list,
+        wa_proj_selections TYPE /excel4ap/selopt_table,
+        ta_cust1 TYPE /excel4ap/selopt_table,
+        ta_cust2 TYPE /excel4ap/selopt_table,
+        ta_cust3 TYPE /excel4ap/selopt_table,
+        ta_cust4 TYPE /excel4ap/selopt_table,
+        ta_cust5 TYPE /excel4ap/selopt_table,
+        ta_cust6 TYPE /excel4ap/selopt_table,
+        ta_cust7 TYPE /excel4ap/selopt_table,
+        ta_cust8 TYPE /excel4ap/selopt_table,
+        ta_cust9 TYPE /excel4ap/selopt_table,
+        ta_cust10 TYPE /excel4ap/selopt_table,
+        ta_cust11 TYPE /excel4ap/selopt_table,
+        ta_cust12 TYPE /excel4ap/selopt_table,
+        ta_cust13 TYPE /excel4ap/selopt_table,
+        ta_cust14 TYPE /excel4ap/selopt_table,
+        ta_cust15 TYPE /excel4ap/selopt_table,
+        uom_low LIKE t006-msehi,
+        uom_high LIKE t006-msehi,
+        result LIKE sy-subrc.
+
+*Field symbols
+  FIELD-SYMBOLS <i_tab> TYPE /excel4ap/balancereq_2.
+  FIELD-SYMBOLS <f1> TYPE /excel4ap/key_selopt.
+
+*Clear result tables
+  REFRESH balresulttable.
+  REFRESH return.
+
+*Process request table
+  LOOP AT batchtable ASSIGNING <i_tab>.
+
+    totbal = 0.
+    balance = 0.
+    totcounter = 0.
+    result = 0.
+
+    "Remember projects selections. No need to get the hierarchy for each summary table
+    CLEAR wa_proj_selections.
+    CLEAR ta_user2.
+
+    LOOP AT stabname INTO wa_stabname "For multiple table calls
+       WHERE xl4akey = <i_tab>-xl4akey.
+
+      "Remember projects selections. No need to get the hierarchy for each summary table
+      IF wa_proj_selections IS INITIAL AND NOT ta_user2 IS INITIAL.
+        wa_proj_selections = ta_user2.
+      ENDIF.
+
+      CLEAR ta_cond_list.
+      CLEAR ta_field_list.
+      CLEAR ta_group_list.
+      CLEAR ta_accounts.
+      CLEAR ta_periods.
+      CLEAR ta_companycode.
+      CLEAR ta_busarea.
+      CLEAR ta_costcentre.
+      CLEAR ta_profcentre.
+      CLEAR ta_funcarea.
+      CLEAR ta_segment.
+      CLEAR ta_costelem.
+      CLEAR ta_user1.
+      CLEAR ta_user2.
+      CLEAR ta_user3.
+      CLEAR ta_user4.
+      CLEAR ta_user5.
+      CLEAR ta_user6.
+      CLEAR ta_user7.
+      CLEAR ta_user8.
+      CLEAR ta_user9.
+      CLEAR ta_user10.
+      CLEAR ta_user11.
+      CLEAR ta_user12.
+      CLEAR ta_user13.
+      CLEAR ta_user14.
+      CLEAR ta_user15.
+      CLEAR ta_user16.
+      CLEAR ta_iorder.
+      CLEAR ta_activity.
+      CLEAR ta_skf.
+      CLEAR ta_cust1.
+      CLEAR ta_cust2.
+      CLEAR ta_cust3.
+      CLEAR ta_cust4.
+      CLEAR ta_cust5.
+      CLEAR ta_cust6.
+      CLEAR ta_cust7.
+      CLEAR ta_cust8.
+      CLEAR ta_cust9.
+      CLEAR ta_cust10.
+      CLEAR ta_cust11.
+      CLEAR ta_cust12.
+      CLEAR ta_cust13.
+      CLEAR ta_cust14.
+      CLEAR ta_cust15.
+
+
+*Fields
+      LOOP AT field_list INTO wa_field_list
+        WHERE xl4akey = <i_tab>-xl4akey.
+        APPEND wa_field_list-field1 TO ta_field_list.
+      ENDLOOP.
+
+*Conditions
+      LOOP AT cond_list INTO wa_cond_list
+        WHERE  xl4akey = <i_tab>-xl4akey.
+        APPEND wa_cond_list-field1 TO ta_cond_list.
+      ENDLOOP.
+
+*Group by
+      LOOP AT group_list INTO wa_group_list
+        WHERE xl4akey = <i_tab>-xl4akey.
+        APPEND wa_group_list-field1 TO ta_group_list.
+      ENDLOOP.
+
+*Accounts
+      LOOP AT accounts ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_accounts.
+      ENDLOOP.
+
+*Periods
+      LOOP AT periods INTO wa_periods
+        WHERE xl4akey = <i_tab>-xl4akey.
+        APPEND wa_periods-field1 TO ta_periods.
+      ENDLOOP.
+
+*Company code
+      LOOP AT companycode ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_companycode.
+      ENDLOOP.
+
+*Business area
+      LOOP AT busarea ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_busarea.
+      ENDLOOP.
+
+*Cost centre
+      LOOP AT costcentre ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_costcentre.
+      ENDLOOP.
+
+*Profit centre
+      LOOP AT profcentre ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_profcentre.
+      ENDLOOP.
+
+*Functional area
+      LOOP AT funcarea ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_funcarea.
+      ENDLOOP.
+
+*Segment
+      LOOP AT segment ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_segment.
+      ENDLOOP.
+
+*Cost element
+      LOOP AT costelem ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_costelem.
+      ENDLOOP.
+
+*User1
+      LOOP AT user1 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user1.
+      ENDLOOP.
+
+*User2
+      LOOP AT user2 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+
+*Check if this is a projects function
+        CLEAR wa_functiontype.
+        LOOP AT functiontype INTO wa_functiontype
+        WHERE  xl4akey = <i_tab>-xl4akey.
+        ENDLOOP.
+
+        IF sy-subrc <> 0.
+
+          "Non projects function
+          wa_selopt-sign = <f1>-sign.
+          wa_selopt-option = <f1>-zoption.
+          wa_selopt-low = <f1>-low.
+          wa_selopt-high = <f1>-high.
+          APPEND wa_selopt TO ta_user2.
+
+        ELSE.
+
+          "It is a projects function
+          CLEAR functionname.
+          CLEAR projecttype.
+          CLEAR cumulative.
+
+          SPLIT wa_functiontype-field1 AT '|' INTO functionname projecttype cumulative.
+
+          IF functionname = 'GLW_GET_PROJECT'.
+
+            "Restore projects selections. No need to get the hierarchy for each summary table
+            IF NOT wa_proj_selections IS INITIAL.
+
+              ta_user2 = wa_proj_selections.
+
+            ELSE.
+
+              CLEAR network_number_low.
+              CLEAR activity_number_low.
+              CLEAR operation_in_order.
+              CLEAR project_number_low.
+              CLEAR wbs_number_low.
+              CLEAR wbs_info.
+              CLEAR ps_object_list.
+              CLEAR ps_object_list_high.
+              CLEAR ps_rech_tab.
+              CLEAR ps_wbs_hierarchy_tab.
+              CLEAR operation_in_order.
+              CLEAR it_activity_list.
+              CLEAR it_actelement_list.
+              CLEAR et_activity_elements.
+              CLEAR et_return.
+
+              CASE projecttype.
+
+                WHEN 'PROJECT'.
+
+                  CALL FUNCTION 'CONVERSION_EXIT_KONPD_INPUT'
+                    EXPORTING
+                      input  = <f1>-low
+                    IMPORTING
+                      output = project_number_low.
+
+                  IF sy-subrc <> 0.
+                    error = 'PROJECT CONVERSION'.
+                  ENDIF.
+
+                  IF <f1>-high <> ''.
+
+                    CALL FUNCTION 'CONVERSION_EXIT_KONPD_INPUT'
+                      EXPORTING
+                        input  = <f1>-high
+                      IMPORTING
+                        output = project_number_high.
+
+                    IF sy-subrc <> 0.
+                      error = 'PROJECT CONVERSION'.
+                    ENDIF.
+
+                  ENDIF.
+
+                WHEN 'WBS'.
+
+                  CALL FUNCTION 'CONVERSION_EXIT_ABPSP_INPUT'
+                    EXPORTING
+                      input  = <f1>-low
+                    IMPORTING
+                      output = wbs_number_low.
+
+                  IF sy-subrc <> 0.
+                    error = 'WBS CONVERSION'.
+                  ENDIF.
+
+                  IF <f1>-high <> ''.
+
+                    CALL FUNCTION 'CONVERSION_EXIT_ABPSP_INPUT'
+                      EXPORTING
+                        input  = <f1>-high
+                      IMPORTING
+                        output = wbs_number_high.
+
+                    IF sy-subrc <> 0.
+                      error = 'WBS CONVERSION'.
+                    ENDIF.
+
+                  ENDIF.
+
+
+                WHEN 'NETWORK'.
+
+
+                  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+                    EXPORTING
+                      input  = <f1>-low
+                    IMPORTING
+                      output = network_number_low.
+
+                  IF sy-subrc <> 0.
+                    error = 'NETWORK CONVERSION'.
+                  ENDIF.
+
+                  IF <f1>-high <> ''.
+
+                    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+                      EXPORTING
+                        input  = <f1>-high
+                      IMPORTING
+                        output = network_number_high.
+
+                    IF sy-subrc <> 0.
+                      error = 'NETWORK CONVERSION'.
+                    ENDIF.
+
+                  ENDIF.
+
+              ENDCASE.
+
+              IF error = ''.
+
+                IF projecttype = 'PROJECT' OR projecttype = 'WBS'.
+
+                  CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                    EXPORTING
+                      i_nplnr          = network_number_low
+                      i_pronr          = project_number_low
+                      i_pspnr          = wbs_number_low
+                      i_with_hierarchy = cumulative
+                      i_with_network   = cumulative
+                      i_with_orders    = cumulative
+                    IMPORTING
+                      e_prps           = wbs_info
+                    TABLES
+                      t_objects        = ps_object_list
+                      rech_tab         = ps_rech_tab
+                      prps_tab         = ps_wbs_hierarchy_tab.
+
+                  IF sy-subrc <> 0.
+                    error = 'PRJ/WBS OBJECT NUMBER'.
+                  ELSE.
+
+                    LOOP AT ps_object_list INTO ps_object.
+
+                      wa_selopt-sign = <f1>-sign.
+                      wa_selopt-option = <f1>-zoption.
+                      wa_selopt-low = ps_object-objnr.
+
+                      IF <f1>-high <> ''.
+
+                        CLEAR ps_rech_tab.
+                        CLEAR ps_wbs_hierarchy_tab.
+                        CLEAR ps_object_list_high.
+
+                        CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                          EXPORTING
+                            i_nplnr          = network_number_high
+                            i_pronr          = project_number_high
+                            i_pspnr          = wbs_number_high
+                            i_with_hierarchy = cumulative
+                            i_with_network   = cumulative
+                            i_with_orders    = cumulative
+                          IMPORTING
+                            e_prps           = wbs_info
+                          TABLES
+                            t_objects        = ps_object_list_high
+                            rech_tab         = ps_rech_tab
+                            prps_tab         = ps_wbs_hierarchy_tab.
+
+                        IF sy-subrc <> 0.
+                          error = 'PRJ/WBS OBJECT NUMBER'.
+                        ELSE.
+
+                          "Can only be one upper item
+                          READ TABLE ps_object_list_high INDEX 1 INTO ps_object.
+                          wa_selopt-high = ps_object-objnr.
+
+                        ENDIF.
+
+                      ENDIF.
+
+                      APPEND wa_selopt TO ta_user2.
+
+                    ENDLOOP.
+
+                  ENDIF.
+
+                ELSEIF projecttype = 'NETWORK'.
+
+*First get the related WBS number so that we can re run the function
+*to include Orders settling to Networks
+
+                  CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                    EXPORTING
+                      i_nplnr          = network_number_low
+                      i_pronr          = project_number_low
+                      i_pspnr          = wbs_number_low
+                      i_with_hierarchy = cumulative
+                      i_with_network   = cumulative
+                      i_with_orders    = cumulative
+                    IMPORTING
+                      e_prps           = wbs_info
+                    TABLES
+                      t_objects        = ps_object_list
+                      rech_tab         = ps_rech_tab
+                      prps_tab         = ps_wbs_hierarchy_tab.
+
+                  IF sy-subrc <> 0.
+                    error = 'NETWORK OBJECT NUMBER'.
+                  ELSE.
+                    "Get the related WBS
+                    READ TABLE ps_object_list INDEX 1 INTO ps_object.
+                    wbs_number_low = ps_object-pspnr.
+
+                    CLEAR ps_object_list.
+                    CLEAR ps_rech_tab.
+                    CLEAR ps_wbs_hierarchy_tab.
+
+                    "Now call with both WBS and Network number
+                    "so we can get the orders linked if any.
+                    CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                      EXPORTING
+                        i_nplnr          = network_number_low
+                        i_pronr          = project_number_low
+                        i_pspnr          = wbs_number_low
+                        i_with_hierarchy = cumulative
+                        i_with_network   = cumulative
+                        i_with_orders    = cumulative
+                      IMPORTING
+                        e_prps           = wbs_info
+                      TABLES
+                        t_objects        = ps_object_list
+                        rech_tab         = ps_rech_tab
+                        prps_tab         = ps_wbs_hierarchy_tab.
+
+                    IF sy-subrc <> 0.
+                      error = 'NET/WBS OBJECT NUMBER'.
+
+                    ELSE.
+
+                      LOOP AT ps_object_list INTO ps_object.
+
+                        "Ignore the WBS object itself
+                        IF ps_object-objnr(2) <> 'PR'.
+
+                          wa_selopt-sign = <f1>-sign.
+                          wa_selopt-option = <f1>-zoption.
+                          wa_selopt-low = ps_object-objnr.
+                          APPEND wa_selopt TO ta_user2.
+
+                        ENDIF.
+
+                      ENDLOOP.
+
+                    ENDIF.
+
+                  ENDIF.
+
+                ELSEIF projecttype = 'NETWORK_ACTIVITY'.
+
+                  SPLIT <f1>-low AT ' ' INTO network_number_low activity_number_low.
+
+                  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+                    EXPORTING
+                      input  = network_number_low
+                    IMPORTING
+                      output = network_number_low.
+
+                  "Get network activity object number
+                  CALL FUNCTION 'READ_NETWORK_AUFPL_APLZL'
+                    EXPORTING
+                      nplnr     = network_number_low
+                      vornr     = activity_number_low
+                      autyp_imp = 20
+                    IMPORTING
+                      afvc_exp  = operation_in_order.
+
+                  IF sy-subrc <> 0.
+                    error = 'NETWORK ACTIVITY CONVERSION'.
+                  ELSE.
+                    wa_selopt-sign = <f1>-sign.
+                    wa_selopt-option = <f1>-zoption.
+                    wa_selopt-low = operation_in_order-objnr.
+                    APPEND wa_selopt TO ta_user2.
+
+                    IF cumulative = 'X'.
+
+                      "Now get any orders linked to network activity
+                      SELECT aufnr FROM  afko INTO wa_order
+                             WHERE  aufpt  = operation_in_order-aufpl
+                             AND    aplzt  = operation_in_order-aplzl.
+
+                        wa_selopt-sign = <f1>-sign.
+                        wa_selopt-option = <f1>-zoption.
+
+                        SELECT objnr FROM aufk INTO wa_selopt-low
+                          WHERE aufnr = wa_order.
+
+                          APPEND wa_selopt TO ta_user2.
+
+                        ENDSELECT.
+
+                      ENDSELECT.
+
+                      "And any activity elements
+                      wa_activitylist-activity = activity_number_low.
+                      APPEND wa_activitylist TO it_activity_list.
+
+                      CALL FUNCTION 'CN2002_ACTELEMENT_GETDATA'
+                        EXPORTING
+                          i_network_number     = network_number_low
+                        TABLES
+                          it_activity_list     = it_activity_list
+                          it_actelement_list   = it_actelement_list
+                          et_activity_elements = et_activity_elements
+                          et_return            = et_return
+                        EXCEPTIONS
+                          data_not_retrieved   = 1
+                          OTHERS               = 2.
+
+                      IF sy-subrc <> 0.
+                        error = 'NETWORK ACTIVITY ELEMENT RETRIEVAL'.
+                      ELSE.
+
+                        "Get the object number for each activity element
+                        LOOP AT et_activity_elements INTO wa_actelement.
+
+                          "Get network activity object number
+                          CALL FUNCTION 'READ_NETWORK_AUFPL_APLZL'
+                            EXPORTING
+                              nplnr     = network_number_low
+                              vornr     = wa_actelement-element
+                              autyp_imp = 20
+                            IMPORTING
+                              afvc_exp  = operation_in_order.
+
+                          IF sy-subrc <> 0.
+                            error = 'NETWORK ACTIVITY CONVERSION'.
+                          ELSE.
+                            wa_selopt-low = operation_in_order-objnr.
+                            APPEND wa_selopt TO ta_user2.
+                          ENDIF.
+
+                        ENDLOOP.
+
+                      ENDIF.
+
+                    ENDIF.
+
+                  ENDIF.
+
+                ENDIF.
+
+              ENDIF.
+
+            ENDIF.
+
+          ELSE.
+
+            "Non projects function
+            wa_selopt-sign = <f1>-sign.
+            wa_selopt-option = <f1>-zoption.
+            wa_selopt-low = <f1>-low.
+            wa_selopt-high = <f1>-high.
+            APPEND wa_selopt TO ta_user2.
+
+          ENDIF.
+
+        ENDIF.
+
+      ENDLOOP.
+
+*User3
+      LOOP AT user3 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user3.
+      ENDLOOP.
+*User4
+      LOOP AT user4 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user4.
+      ENDLOOP.
+*User5
+      LOOP AT user5 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user5.
+      ENDLOOP.
+*User6
+      LOOP AT user6 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user6.
+      ENDLOOP.
+*User7
+      LOOP AT user7 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user7.
+      ENDLOOP.
+*User8
+      LOOP AT user8 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user8.
+      ENDLOOP.
+*User9
+      LOOP AT user9 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user9.
+      ENDLOOP.
+*User10
+      LOOP AT user10 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user10.
+      ENDLOOP.
+*User11
+      LOOP AT user11 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user11.
+      ENDLOOP.
+*User12
+      LOOP AT user12 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user12.
+      ENDLOOP.
+*User13
+      LOOP AT user13 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user13.
+      ENDLOOP.
+*User14
+      LOOP AT user14 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user14.
+      ENDLOOP.
+*User15
+      LOOP AT user15 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user15.
+      ENDLOOP.
+*User16
+      LOOP AT user16 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_user16.
+      ENDLOOP.
+
+*Internal order
+      LOOP AT iorder ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_iorder.
+      ENDLOOP.
+
+*Activity type
+      LOOP AT activity ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_activity.
+      ENDLOOP.
+
+*SKFs
+      LOOP AT skf ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_skf.
+      ENDLOOP.
+
+*Cust
+      LOOP AT cust1 ASSIGNING <f1>
+        WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust1.
+      ENDLOOP.
+
+      LOOP AT cust2 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust2.
+      ENDLOOP.
+
+      LOOP AT cust3 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust3.
+      ENDLOOP.
+
+      LOOP AT cust4 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust4.
+      ENDLOOP.
+
+      LOOP AT cust5 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust5.
+      ENDLOOP.
+
+      LOOP AT cust6 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust6.
+      ENDLOOP.
+
+      LOOP AT cust7 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust7.
+      ENDLOOP.
+
+      LOOP AT cust8 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust8.
+      ENDLOOP.
+
+      LOOP AT cust9 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust9.
+      ENDLOOP.
+
+      LOOP AT cust10 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust10.
+      ENDLOOP.
+
+      LOOP AT cust11 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust11.
+      ENDLOOP.
+
+      LOOP AT cust12 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+
+*Get the function name
+        CLEAR wa_functiontype.
+        LOOP AT functiontype INTO wa_functiontype
+        WHERE  xl4akey = <i_tab>-xl4akey.
+        ENDLOOP.
+
+        IF sy-subrc <> 0.
+
+          "Non COPA function
+          wa_selopt-sign = <f1>-sign.
+          wa_selopt-option = <f1>-zoption.
+          wa_selopt-low = <f1>-low.
+          wa_selopt-high = <f1>-high.
+          APPEND wa_selopt TO ta_cust12.
+
+        ELSE.
+
+          "Is it a COPA function
+          CLEAR functionname.
+          CLEAR projecttype.
+          CLEAR cumulative.
+
+          SPLIT wa_functiontype-field1 AT '|' INTO functionname projecttype cumulative.
+
+          IF functionname = 'GLW_GET_COPA_CB' OR
+            functionname = 'GLW_GET_DAILY_GL'.
+
+            CLEAR wbs_number_low.
+            CLEAR wbs_number_high.
+            CLEAR wbs_info.
+            CLEAR ps_object_list.
+            CLEAR ps_object_list_high.
+            CLEAR ps_rech_tab.
+            CLEAR ps_wbs_hierarchy_tab.
+            CLEAR et_return.
+
+            CALL FUNCTION 'CONVERSION_EXIT_ABPSP_INPUT'
+              EXPORTING
+                input  = <f1>-low
+              IMPORTING
+                output = wbs_number_low.
+
+            IF sy-subrc <> 0.
+              error = 'WBS CONVERSION'.
+            ENDIF.
+
+            IF <f1>-high <> ''.
+
+              CALL FUNCTION 'CONVERSION_EXIT_ABPSP_INPUT'
+                EXPORTING
+                  input  = <f1>-high
+                IMPORTING
+                  output = wbs_number_high.
+
+              IF sy-subrc <> 0.
+                error = 'WBS CONVERSION'.
+              ENDIF.
+
+            ENDIF.
+
+            IF error = '' AND functionname = 'GLW_GET_COPA_CB'.
+
+              CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                EXPORTING
+                  i_nplnr          = network_number_low
+                  i_pronr          = project_number_low
+                  i_pspnr          = wbs_number_low
+                  i_with_hierarchy = cumulative
+                  i_with_network   = cumulative
+                  i_with_orders    = cumulative
+                IMPORTING
+                  e_prps           = wbs_info
+                TABLES
+                  t_objects        = ps_object_list
+                  rech_tab         = ps_rech_tab
+                  prps_tab         = ps_wbs_hierarchy_tab.
+
+              IF sy-subrc <> 0.
+                error = 'PRJ/WBS OBJECT NUMBER'.
+              ELSE.
+
+                LOOP AT ps_object_list INTO ps_object.
+
+                  CLEAR wa_selopt.
+
+                  wa_selopt-sign = <f1>-sign.
+                  wa_selopt-option = <f1>-zoption.
+                  wa_selopt-low = ps_object-objnr.
+
+                  IF <f1>-high <> ''.
+
+                    CLEAR ps_rech_tab.
+                    CLEAR ps_wbs_hierarchy_tab.
+                    CLEAR ps_object_list_high.
+
+                    CALL FUNCTION 'GET_PS_OBJECTNUMBER'
+                      EXPORTING
+                        i_nplnr          = network_number_high
+                        i_pronr          = project_number_high
+                        i_pspnr          = wbs_number_high
+                        i_with_hierarchy = cumulative
+                        i_with_network   = cumulative
+                        i_with_orders    = cumulative
+                      IMPORTING
+                        e_prps           = wbs_info
+                      TABLES
+                        t_objects        = ps_object_list_high
+                        rech_tab         = ps_rech_tab
+                        prps_tab         = ps_wbs_hierarchy_tab.
+
+                    IF sy-subrc <> 0.
+                      error = 'PRJ/WBS OBJECT NUMBER'.
+                    ELSE.
+
+                      "Can only be one upper item
+                      READ TABLE ps_object_list_high INDEX 1 INTO ps_object.
+                      wa_selopt-high = ps_object-objnr.
+
+                    ENDIF.
+
+                  ENDIF.
+
+                  APPEND wa_selopt TO ta_cust12.
+
+                ENDLOOP.
+
+              ENDIF.
+
+            ELSEIF error = '' AND functionname = 'GLW_GET_DAILY_GL'.
+
+              wa_selopt-sign = <f1>-sign.
+              wa_selopt-option = <f1>-zoption.
+              wa_selopt-low = wbs_number_low.
+              wa_selopt-high = wbs_number_high.
+              APPEND wa_selopt TO ta_cust12.
+
+            ENDIF.
+
+          ELSE.
+
+            "Non COPA function
+            wa_selopt-sign = <f1>-sign.
+            wa_selopt-option = <f1>-zoption.
+            wa_selopt-low = <f1>-low.
+            wa_selopt-high = <f1>-high.
+            APPEND wa_selopt TO ta_cust12.
+
+          ENDIF.
+
+        ENDIF.
+
+      ENDLOOP.
+
+      LOOP AT cust13 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust13.
+      ENDLOOP.
+
+      LOOP AT cust14 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust14.
+      ENDLOOP.
+
+      LOOP AT cust15 ASSIGNING <f1>
+       WHERE xl4akey = <i_tab>-xl4akey.
+        wa_selopt-sign = <f1>-sign.
+        wa_selopt-option = <f1>-zoption.
+        wa_selopt-low = <f1>-low.
+        wa_selopt-high = <f1>-high.
+        APPEND wa_selopt TO ta_cust15.
+      ENDLOOP.
+
+*Auth check
+      IF <i_tab>-authtest = '1' OR <i_tab>-authtest = '2' OR
+        <i_tab>-authtest = '3'.
+
+        "Check if this is a CCA function
+        CLEAR wa_functiontype.
+        LOOP AT functiontype INTO wa_functiontype
+        WHERE  xl4akey = <i_tab>-xl4akey.
+        ENDLOOP.
+
+        IF wa_functiontype-field1 = 'GLW_GET_CCA' OR
+           wa_functiontype-field1 = 'GLW_GET_ACTIVITY_TYPE' OR
+           wa_functiontype-field1 = 'GLW_GET_SKF'.
+
+          "Can have profit centre SKF
+          IF NOT ta_profcentre IS INITIAL.
+
+            PERFORM auth_check  USING ta_profcentre  ta_costelem
+                                 wa_stabname-field1 <i_tab>-contarea
+                                 '27' wa_functiontype-field1
+                                 <i_tab>-authtest
+                                CHANGING result.
+
+            "else CCA or Order SKF
+          ELSE.
+
+            PERFORM auth_check  USING ta_costcentre  ta_costelem
+                                 wa_stabname-field1 <i_tab>-contarea
+                                 '27' wa_functiontype-field1
+                                 <i_tab>-authtest
+                                CHANGING result.
+
+          ENDIF.
+
+        ELSEIF wa_functiontype-field1 = 'GLW_GET_GL' OR
+               wa_functiontype-field1 = 'GLW_GET_GL_CUSTOM'.
+
+          "CCA or both
+          IF <i_tab>-authtest = '1' OR <i_tab>-authtest = '3'.
+
+            PERFORM auth_check  USING ta_costcentre  ta_accounts
+                               wa_stabname-field1 <i_tab>-contarea
+                               '27' wa_functiontype-field1
+                               <i_tab>-authtest
+                              CHANGING result.
+          ENDIF.
+
+          "PCA or
+          IF <i_tab>-authtest = '2' OR <i_tab>-authtest = '3'.
+
+            PERFORM auth_check  USING ta_profcentre  ta_accounts
+                               'GLPCT' <i_tab>-contarea
+                               '27' wa_functiontype-field1
+                               <i_tab>-authtest
+                              CHANGING result.
+          ENDIF.
+
+        ELSEIF wa_functiontype-field1 = 'GLW_GET_PCA'.
+
+          IF ta_costelem IS INITIAL.
+
+            PERFORM auth_check  USING ta_profcentre  ta_accounts
+                            wa_stabname-field1 <i_tab>-contarea
+                            '27' wa_functiontype-field1
+                            <i_tab>-authtest
+                           CHANGING result.
+
+          ELSE.
+
+            PERFORM auth_check  USING ta_profcentre  ta_costelem
+                               wa_stabname-field1 <i_tab>-contarea
+                               '27' wa_functiontype-field1
+                               <i_tab>-authtest
+                              CHANGING result.
+
+          ENDIF.
+
+        ELSEIF wa_functiontype-field1 = 'GLW_GET_ORDER'.
+
+          PERFORM auth_check  USING ta_iorder  ta_costelem
+                                           wa_stabname-field1 <i_tab>-contarea
+                                           '27' wa_functiontype-field1
+                                           <i_tab>-authtest
+                                          CHANGING result.
+
+        ENDIF.
+
+      ENDIF.
+
+*Retrieve balance for parameters
+      IF result = 0.
+        IF wa_stabname-field1 <> 'LFC1' AND wa_stabname-field1 <> 'KNC1'
+          AND wa_stabname-field1 <> 'BSIK' AND wa_stabname-field1 <> 'BSID'
+          AND wa_stabname-field1 <> 'BSIS'.
+
+          PERFORM getbal4_6 TABLES ta_periods USING wa_stabname-field1 ta_field_list ta_cond_list
+                ta_group_list <i_tab>-colheader <i_tab>-zyear <i_tab>-rectype <i_tab>-version
+                ta_accounts <i_tab>-ledger ta_companycode <i_tab>-contarea ta_busarea
+                ta_costcentre ta_profcentre ta_funcarea ta_segment ta_costelem
+                ta_user1 ta_user2 ta_user3 ta_user4 ta_user5 ta_user6 ta_user7 ta_user8 ta_user9
+                ta_user10 ta_user11 ta_user12 ta_user13 ta_user14 ta_user15 ta_user16
+                ta_iorder ta_activity ta_skf ta_cust1 ta_cust2 ta_cust3 ta_cust4
+                ta_cust5 ta_cust6 ta_cust7 ta_cust8 ta_cust9 ta_cust10 ta_cust11 ta_cust12
+                ta_cust13 ta_cust14 ta_cust15 autosplit ccodesplit ficosplit
+                CHANGING balance counter error.
+
+        ELSE.
+
+          PERFORM getbalarapdaily TABLES ta_periods ta_field_list ta_cond_list
+                ta_group_list ta_accounts ta_companycode ta_busarea
+                ta_costcentre ta_profcentre ta_funcarea ta_segment ta_costelem
+                ta_user1 ta_user2 ta_user3 ta_user4 ta_user5 ta_user6 ta_user7 ta_user8 ta_user9
+                ta_user10 ta_user11 ta_user12 ta_user13 ta_user14 ta_user15 ta_user16
+                ta_iorder ta_activity ta_skf USING wa_stabname-field1  <i_tab>-colheader
+                      <i_tab>-zyear <i_tab>-rectype <i_tab>-version
+                 <i_tab>-ledger  <i_tab>-contarea ta_cust12 CHANGING balance counter error.
+
+        ENDIF.
+
+      ELSE.
+        EXIT.
+      ENDIF.
+
+*Catch error message
+      IF error <> ''.
+        return-xl4akey = <i_tab>-xl4akey.
+        return-field1 = error.
+        APPEND return.
+      ENDIF.
+
+*Total for each table
+      totbal = totbal + balance.
+      totcounter = totcounter + counter.
+
+    ENDLOOP.
+
+*Create result table
+    balresulttable-xl4akey = <i_tab>-xl4akey. "Assign key
+    balresulttable-balance = totbal.  "Assign total
+    balresulttable-counter = totcounter. "Assign number of records read
+    balresulttable-authresult = result. "Auth test result
+    APPEND balresulttable.
+
+  ENDLOOP.
+
+*Clear data passed to function to reduce load on return.
+  REFRESH batchtable.
+  REFRESH stabname.
+  REFRESH field_list.
+  REFRESH cond_list.
+  REFRESH group_list.
+  REFRESH periods.
+  REFRESH companycode.
+  REFRESH accounts.
+  REFRESH busarea.
+  REFRESH costcentre.
+  REFRESH profcentre.
+  REFRESH segment.
+  REFRESH funcarea.
+  REFRESH costelem.
+  REFRESH user1.
+  REFRESH user2.
+  REFRESH user3.
+  REFRESH user4.
+  REFRESH user5.
+  REFRESH user6.
+  REFRESH user7.
+  REFRESH user8.
+  REFRESH user9.
+  REFRESH user10.
+  REFRESH user11.
+  REFRESH user12.
+  REFRESH user13.
+  REFRESH user14.
+  REFRESH user15.
+  REFRESH user16.
+  REFRESH iorder.
+  REFRESH activity.
+  REFRESH skf.
+
+  REFRESH cust1.
+  REFRESH cust2.
+  REFRESH cust3.
+  REFRESH cust4.
+  REFRESH cust5.
+  REFRESH cust6.
+  REFRESH cust7.
+  REFRESH cust8.
+  REFRESH cust9.
+  REFRESH cust10.
+  REFRESH cust11.
+  REFRESH cust12.
+  REFRESH cust13.
+  REFRESH cust14.
+  REFRESH cust15.
+
+
+
+*}   INSERT
+ENDFUNCTION.
+*{   INSERT         DEVK900071                                        1
+*
+*&---------------------------------------------------------------------*
+*&      Form  GETBAL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->PERIODS             text
+*      -->VALUE(STAB)         text
+*      -->VALUE(FIELDS)       text
+*      -->VALUE(CONDS)        text
+*      -->VALUE(GROUPS)       text
+*      -->VALUE(COLHEADER)    text
+*      -->VALUE(ZYEAR)        text
+*      -->VALUE(RECTYPE)      text
+*      -->VALUE(VERSION)      text
+*      -->VALUE(ACCOUNTS)     text
+*      -->VALUE(LEDGER)       text
+*      -->VALUE(COMPANYCODE)  text
+*      -->VALUE(CONTAREA)     text
+*      -->VALUE(BUSAREA)      text
+*      -->VALUE(COSTCENTRE)   text
+*      -->VALUE(PROFCENTRE)   text
+*      -->VALUE(FUNCAREA)     text
+*      -->VALUE(SEGMENT)      text
+*      -->VALUE(COSTELEM)     text
+*      -->VALUE(USER1)        text
+*      -->VALUE(IORDER)       text
+*      -->VALUE(ACTIVITY)     text
+*      -->VALUE(SKF)          text
+*      -->BALANCE             text
+*----------------------------------------------------------------------*
+FORM getbal4_6 TABLES periods USING VALUE(stab) VALUE(fields) VALUE(conds)
+  VALUE(groups) VALUE(colheader) VALUE(zyear) VALUE(rectype) VALUE(version)
+  VALUE(accounts) TYPE /excel4ap/selopt_table VALUE(ledger) VALUE(companycode) TYPE /excel4ap/selopt_table
+  VALUE(contarea) VALUE(busarea) VALUE(costcentre) TYPE /excel4ap/selopt_table
+  VALUE(profcentre) TYPE /excel4ap/selopt_table  VALUE(funcarea) VALUE(segment)
+  VALUE(costelem) TYPE /excel4ap/selopt_table VALUE(user1)
+  VALUE(user2) VALUE(user3) VALUE(user4) VALUE(user5) VALUE(user6) VALUE(user7) VALUE(user8)
+  VALUE(user9) VALUE(user10) VALUE(user11) VALUE(user12) VALUE(user13) VALUE(user14)
+  VALUE(user15) VALUE(user16) VALUE(iorder) TYPE /excel4ap/selopt_table VALUE(activity)
+  VALUE(skf) VALUE(cust1) VALUE(cust2) VALUE(cust3) VALUE(cust4)
+  VALUE(cust5) VALUE(cust6) VALUE(cust7) VALUE(cust8)
+  VALUE(cust9) VALUE(cust10) VALUE(cust11) VALUE(cust12)
+  VALUE(cust13) VALUE(cust14) VALUE(cust15) value(autosplit) value(ccodesplit)
+  value(ficosplit)
+  CHANGING balance counter error.
+* Excel4Apps Get Balance for parameters - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 1.05.00
+
+*Declarations
+  DATA: tabref TYPE REF TO data,
+   struct_type  TYPE REF TO cl_abap_structdescr,
+   table_type   TYPE REF TO cl_abap_tabledescr,
+   symb_tab     TYPE  cl_abap_structdescr=>symbol_table,
+   symb         LIKE LINE OF symb_tab,
+   comp_tab     TYPE  cl_abap_structdescr=>component_table,
+   comp         LIKE LINE OF comp_tab,
+   oref         TYPE REF TO cx_root,
+   table(30) TYPE c,
+   join TYPE string,
+   copa_periods TYPE /excel4ap/selopt_table,
+   wa_selopt TYPE selopt,
+   wa_period TYPE /excel4ap/text50.
+
+  FIELD-SYMBOLS: <i_tab> TYPE STANDARD TABLE.
+
+*Inititalise
+  CLEAR balance.
+  CLEAR counter.
+  error = ''.
+
+  TRY.
+
+*Create internal structure based on table
+      struct_type ?=
+                cl_abap_typedescr=>describe_by_name( stab ).
+      symb_tab = struct_type->get_symbols( ).
+
+*Append a counter field to structure
+      symb-name = 'COUNTER'.
+      symb-type ?= cl_abap_typedescr=>describe_by_data( counter ).
+
+      INSERT symb INTO TABLE symb_tab.
+
+*Create a component table from the symbol table.
+      LOOP AT symb_tab INTO symb.
+        comp-name = symb-name.
+        comp-type = symb-type.
+        APPEND comp TO comp_tab.
+      ENDLOOP.
+
+*Create internal table based on structure
+      struct_type = cl_abap_structdescr=>create( comp_tab ).
+      table_type = cl_abap_tabledescr=>create( struct_type ).
+      CREATE DATA tabref TYPE HANDLE table_type.
+      ASSIGN tabref->* TO <i_tab>.
+
+*Check for COPA
+      table = stab.
+      IF table(3) = 'CE3'.
+        CONCATENATE 'CE4' table+3(4) ` AS A INNER JOIN ` table INTO join.
+        CONCATENATE join ` AS B ON B~MANDT = SY-MANDT AND A~PAOBJNR = B~PAOBJNR` INTO join.
+
+        LOOP AT periods INTO wa_period.
+
+          wa_selopt-sign = 'I'.
+          wa_selopt-option = 'EQ'.
+          wa_selopt-low = wa_period.
+
+          APPEND wa_selopt TO copa_periods.
+
+        ENDLOOP.
+
+        SELECT  (fields)
+                    INTO CORRESPONDING FIELDS OF TABLE <i_tab>
+                    FROM (join)
+                    WHERE (conds)
+                  GROUP BY (groups).
+
+        PERFORM calcbalance4_6 TABLES <i_tab> periods USING table colheader CHANGING balance counter.
+
+      ELSEIF table(3) = 'CE1' OR table(3) = 'CE2'.
+
+        LOOP AT periods INTO wa_period.
+
+          wa_selopt-sign = 'I'.
+          wa_selopt-option = 'EQ'.
+          wa_selopt-low = wa_period.
+
+          APPEND wa_selopt TO copa_periods.
+
+        ENDLOOP.
+
+        SELECT  (fields)
+                    INTO CORRESPONDING FIELDS OF TABLE <i_tab>
+                    FROM (stab)
+                    WHERE (conds)
+                  GROUP BY (groups).
+
+        PERFORM calcbalance4_6 TABLES <i_tab> periods USING table colheader CHANGING balance counter.
+
+      ELSE.
+
+        "Auto split statements
+        IF autosplit = 'X'.
+
+          PERFORM getsubselection4_6 TABLES periods <i_tab> USING stab fields conds
+             groups colheader zyear rectype version
+             accounts ledger companycode contarea busarea
+             costcentre profcentre funcarea segment costelem
+             user1 user2 user3 user4 user5 user6 user7 user8 user9
+             user10 user11 user12 user13 user14 user15 user16
+             iorder activity skf cust1 cust2 cust3 cust4
+             cust5 cust6 cust7 cust8 cust9 cust10 cust11 cust12
+             cust13 cust14 cust15 'companycode' 1 ccodesplit ficosplit ccodesplit
+             CHANGING balance counter error.
+
+        ELSE.
+*Fetch
+          SELECT  (fields)
+              INTO CORRESPONDING FIELDS OF TABLE <i_tab>
+              FROM (stab)
+              WHERE (conds)
+            GROUP BY (groups).
+
+          PERFORM calcbalance4_6 TABLES <i_tab> periods USING table colheader CHANGING balance counter.
+
+        ENDIF.
+
+      ENDIF.
+
+    CATCH  cx_sy_create_data_error INTO oref.
+      error = oref->get_text( ).
+    CATCH cx_sy_dynamic_osql_semantics INTO oref.
+      error = oref->get_text( ).
+
+  ENDTRY.
+
+ENDFORM.

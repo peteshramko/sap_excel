@@ -1,0 +1,66 @@
+FUNCTION BAPI_PS_INITIALIZATION .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"----------------------------------------------------------------------
+
+* Init PI-BAPI related stuff
+  PERFORM ps_bapi_init_global_variables.
+
+* Init GUID data
+  call function 'PS_GUID_INITIALIZE'.
+
+* Init network and order related tables
+  call function 'CO_ZF_DATA_RESET_COMPLETE'.
+
+* Init project related tables
+  call function 'CJWI_INIT'.
+
+* Init status related tables
+  call function 'STATUS_BUFFER_REFRESH'.
+
+* Init posting/settlement rule tables
+  call function 'K_SETTLEMENT_RULE_REFRESH'
+       exporting
+            all_refresh = con_yes.
+
+  call function 'PM_PARTNER_REFRESH_ALL'.                   "n_1503068
+
+* Eventually, set the initialized flag in PS_FLAG
+  call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+       exporting
+            i_initialized  = con_yes.
+
+* Init flg_wbs_partition in CJDW
+  CALL FUNCTION 'CJDW_GLOBAL_VALUES'
+       EXPORTING
+            v_wbs_partition = con_no.
+
+  CALL FUNCTION 'CK_F_CO_OBJECT_ALL_REFRESH'.  "n_777934
+
+  PERFORM FREE_TRTAB(SAPLCJDT).                             "NT_801820
+
+  CALL FUNCTION 'ME_REFRESH_REQUISITION_EXT'.               "n_1150981
+
+  PERFORM RESET_ALL_ACL_DATA(SAPLCNACL).                    "Note_1336180
+
+* Clearing HFPO data is required only in EHP4 as Project Editor calls BAPI_BUS2002_SET_STATUS twice.
+  call function 'REFRESH_HFPO_DATA'.
+
+  CALL FUNCTION 'MESSAGES_INITIALIZE'                       "NT_1425473
+   EXCEPTIONS
+     LOG_NOT_ACTIVE              = 1
+     WRONG_IDENTIFICATION        = 2
+     OTHERS                      = 3.
+
+  CALL FUNCTION 'MESSAGES_STOP'                             "NT_1425473
+   EXCEPTIONS
+     OTHERS                       = 1.
+
+   CALL FUNCTION 'INVEST_ASSET_REFRESH'                     "n_1821227
+   EXPORTING
+     I_ALL_OBJECTS   = CON_YES
+   EXCEPTIONS
+     RW_OBJEKT_FEHLT = 1
+     OTHERS          = 2.
+
+ENDFUNCTION.

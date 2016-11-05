@@ -1,0 +1,22 @@
+﻿  
+  Microsoft (R) Program Maintenance Utility Version 14.00.24210.0
+  Copyright (C) Microsoft Corporation.  All rights reserved.
+  
+  	del /f /q ".\DEBUG\*.*" 1>nul 2>nul
+  	rd /S /Q .\DEBUG 1>nul 2>nul
+  
+  Microsoft (R) Program Maintenance Utility Version 14.00.24210.0
+  Copyright (C) Microsoft Corporation.  All rights reserved.
+  
+  	cl /nologo /Od /W3 /WX /EHsc /Zi /MDd /Fd".\DEBUG\GENERIC.pdb" /Fo".\DEBUG\\" /I"." /I"..\..\include" /I"..\..\src" /D"WIN32" /D"_WINDOWS" /D"_MBCS" /D"_USRDLL" /D"GENERIC_EXPORTS" /D "_DEBUG" /c "GENERIC.c"
+  GENERIC.c
+  	rc  /d "NDEBUG" /Fo".\DEBUG\GENERIC.res" /I"." /I"..\..\include" /I"..\..\src" GENERIC.rc
+  Microsoft (R) Windows (R) Resource Compiler Version 6.3.9600.17336
+  
+  Copyright (C) Microsoft Corporation.  All rights reserved.
+  
+  
+  	cd .\DEBUG
+  	link.exe /DLL /manifest /nologo "GENERIC.obj"  "GENERIC.res" /OUT:GENERIC.xll  /subsystem:windows -def:.\..\generic.def /DEBUG /INCREMENTAL:NO msvcrtd.lib  kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib .\..\..\..\lib\Frmwrk32.lib .\..\..\..\lib\xlcall32.lib
+     Creating library GENERIC.lib and object GENERIC.exp
+  	mt.exe /nologo /outputresource:"GENERIC.xll;#2" /manifest "GENERIC.xll.manifest"

@@ -1,0 +1,198 @@
+FUNCTION bapi_bus2054_getdata .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_PROJECT_DEFINITION) TYPE
+*"BAPI_BUS2054_DETAIL-PROJECT_DEFINITION OPTIONAL
+*"     VALUE(I_LANGUAGE) TYPE  BAPI_BUS2054_DETAIL-LANGU_ISO OPTIONAL
+*"     VALUE(I_MAX_ROWS) TYPE  BAPIF4A-MAX_ROWS OPTIONAL
+*"  TABLES
+*"      IT_WBS_ELEMENT STRUCTURE  BAPI_WBS_LIST OPTIONAL
+*"      ET_WBS_ELEMENT STRUCTURE  BAPI_BUS2054_DETAIL OPTIONAL
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: lv_key               TYPE char24,
+        lv_subrc             LIKE sy-subrc,
+        lv_wbs_element       LIKE bapi_bus2054_detail-wbs_element,
+        ls_wbs_element       LIKE bapi_bus2054_detail,
+        lt_wbs_element       TYPE TABLE OF bapi_wbs_list,
+        lv_dialog_status_tmp TYPE flag,
+        lv_msghand_num       LIKE sy-uzeit,
+        lv_language          LIKE sy-langu,
+        lv_project           LIKE proj-pspid,
+        lv_warning           TYPE flag,
+        lv_error             TYPE c.
+
+* Exception 'message_handler_error' is NOT caught by design
+* to force a dump as we deal with a program error in this case
+  CALL FUNCTION 'PS_BAPI_INITIALIZE'
+       EXPORTING
+            i_language_iso  = i_language
+       IMPORTING
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+            e_language_sap  = lv_language
+       TABLES
+            return          = et_return.
+
+* Call early BAdI
+  CALL FUNCTION 'PS_BAPI_CALL_BADI'
+       EXPORTING
+            i_project_name     = i_project_definition
+            i_language         = lv_language
+            i_mode             = con_badi_in
+            i_method           = con_wbs_getdata
+       TABLES
+            it_wbs_element_get = lt_wbs_element
+            extensionin        = extensionin
+       EXCEPTIONS
+            badi_in_error      = 1.
+  IF sy-subrc <> 0.
+    lv_subrc = 4.
+    MESSAGE e111(cnif_pi) INTO null.
+    PERFORM put_sy_message(saplco2o).
+  ENDIF.
+
+* Get WBS elements for selected criteria
+  IF i_project_definition IS INITIAL.
+    IF NOT it_wbs_element[] IS INITIAL.
+      lt_wbs_element[] = it_wbs_element[].
+    ELSE.
+      lv_subrc = 3.
+      MESSAGE e115(cnif_pi) WITH text-pro text-wbs INTO null.
+      PERFORM put_sy_message(saplco2o).
+    ENDIF.
+  ELSE.
+    CALL FUNCTION 'CONVERSION_EXIT_KONPD_INPUT'
+         EXPORTING
+              input         = i_project_definition
+         IMPORTING
+              output        = lv_project
+         EXCEPTIONS
+              not_found     = 1
+              error_message = 2
+              OTHERS        = 3.
+    IF sy-subrc <> 0.
+      lv_subrc = 4.
+      PERFORM put_sy_message(saplco2o).
+    ELSEIF it_wbs_element[] IS INITIAL.
+      SELECT posid
+             FROM prps
+             INTO TABLE lt_wbs_element
+             WHERE psphi = lv_project
+             ORDER BY posid.
+    ELSE.
+      SELECT posid
+             FROM prps
+             INTO TABLE lt_wbs_element
+             FOR ALL ENTRIES IN it_wbs_element
+             WHERE psphi = lv_project
+               AND posid = it_wbs_element-wbs_element.
+    ENDIF.
+  ENDIF.
+
+  IF lt_wbs_element[] IS INITIAL AND lv_subrc IS INITIAL.
+    lv_subrc = 1.
+    MESSAGE i096(cnif_pi) INTO null.
+    CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+         TABLES
+              return = et_return.
+  ENDIF.
+
+  IF NOT lv_subrc IS INITIAL.
+* if already errors occurred, return them in the return table and finish
+    CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APPEND'
+         EXPORTING
+              i_msghand_num = lv_msghand_num
+         TABLES
+              return        = et_return.
+  ELSE.
+* Get the data
+    LOOP AT lt_wbs_element INTO lv_wbs_element.
+      CLEAR: lv_error, lv_warning.
+      CALL FUNCTION 'CONVERSION_EXIT_ABPSN_INPUT'
+           EXPORTING
+                input         = lv_wbs_element
+           IMPORTING
+                output        = lv_wbs_element
+           EXCEPTIONS
+                error_message = 1.
+      IF sy-subrc <> 0.
+        PERFORM put_sy_message(saplco2o).
+        lv_error = 'X'.
+      ELSE.
+        CALL FUNCTION 'CJ2054_GETDATA'
+             EXPORTING
+                  i_posid            = lv_wbs_element
+                  i_language         = lv_language
+             IMPORTING
+                  e_wbs_element      = ls_wbs_element
+                  e_warning          = lv_warning
+             TABLES
+                  extensionout       = extensionout
+             EXCEPTIONS
+                  data_not_retrieved = 1.
+        IF sy-subrc <> 0.
+          lv_error = 'X'.
+        ENDIF.
+      ENDIF.
+
+* Write messages
+      IF lv_error IS INITIAL.
+        IF lv_warning IS INITIAL.
+          MESSAGE s093(cnif_pi) WITH text-wbs lv_wbs_element INTO null.
+        ELSE.
+          MESSAGE w095(cnif_pi) WITH text-wbs lv_wbs_element INTO null.
+        ENDIF.
+        APPEND ls_wbs_element TO et_wbs_element.
+      ELSE.
+* ^_nt_1298966
+*        MESSAGE e094(cnif_pi) WITH text-wbs lv_wbs_element INTO null.
+        DATA: l_wbs_chr(24).
+        move lv_wbs_element to l_wbs_chr.
+        MESSAGE e094(cnif_pi) WITH text-wbs l_wbs_chr INTO null.
+* v_nt_1298966
+      ENDIF.
+*     Get last message of current project ('S' vs. 'E') as first one in
+*     the log (only 'message ... into null' NOT followed by 'perform
+*     put_sy_message(saplco2o)')
+      CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+           TABLES
+                return = et_return.
+*     sy-msgv2 contains the converted WBS element
+      lv_key = sy-msgv2.
+*     Get remaining messages of current method (stored by:
+*     'message ... into null' AND 'perform put_sy_message(saplco2o)')
+      CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APPEND'
+           EXPORTING
+                objectkey     = lv_key
+                i_msghand_num = lv_msghand_num
+           TABLES
+                return        = et_return.
+
+* check maximum rows to be returned
+      IF sy-tabix = i_max_rows.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+* Finish BAPI
+  CALL FUNCTION 'PS_BAPI_FINISH'
+       EXPORTING
+            i_project_name     = i_project_definition
+            i_dialog_status    = lv_dialog_status_tmp
+            i_msghand_num      = lv_msghand_num
+            i_method           = con_wbs_getdata
+            i_subrc            = lv_subrc
+            i_language         = lv_language
+       TABLES
+            it_wbs_element_get = it_wbs_element
+            return             = et_return
+            extensionin        = extensionin
+            extensionout       = extensionout.
+
+ENDFUNCTION.

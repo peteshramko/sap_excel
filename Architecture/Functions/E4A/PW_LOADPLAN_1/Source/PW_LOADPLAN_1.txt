@@ -1,0 +1,380 @@
+function /excel4ap/pw_loadplan_2.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      PW_PLAN_REQUEST STRUCTURE  /EXCEL4AP/PW_KEY_REQUEST
+*"      COST_PLAN_HEADERINFO STRUCTURE  /EXCEL4AP/PW_KEY_BAPIPLNHDR
+*"      COST_PLAN_INDEXSTRUCTURE STRUCTURE
+*"        /EXCEL4AP/PW_KEY_BAPIACPSTRU
+*"      COST_PLAN_COOBJECT STRUCTURE  /EXCEL4AP/PW_KEY_BAPIPCPOBJ
+*"      COST_PLAN_TOTVALUE STRUCTURE  /EXCEL4AP/PW_KEY_BAPIPCPTOT
+*"      NEWGL_HEADERINFO STRUCTURE  /EXCEL4AP/PW_KEY_NEWGLHEADER
+*"      NEWGL_PERVAL STRUCTURE  /EXCEL4AP/PW_KEY_NEWGLPERVAL
+*"      NEWGL_FIELDLIST STRUCTURE  /EXCEL4AP/PW_KEY_NEWGLFLDLIST
+*"      RETURN STRUCTURE  /EXCEL4AP/PW_KEY_BAPIRET2
+*"      ACT_PLAN_OUT_HEADERINFO STRUCTURE  /EXCEL4AP/PW_KEY_BAPIPLNHDR
+*"      ACT_PLAN_OUT_INDEXSTRUCTURE STRUCTURE
+*"        /EXCEL4AP/PW_KEY_BAPIACPSTRU
+*"      ACT_PLAN_OUT_COOBJECT STRUCTURE  /EXCEL4AP/PW_KEY_BAPIACPOBJ
+*"      ACT_PLAN_OUT_TOTVALUE STRUCTURE  /EXCEL4AP/PW_KEY_BAPIACPTOT
+*"      PCA_PLAN_HEADERINFO STRUCTURE  /EXCEL4AP/PW_KEY_PCAPLNHDR
+*"      PCA_PLAN_TOTVALUE STRUCTURE  /EXCEL4AP/PW_KEY_PCAPLNLINE
+*"      SKF_PLAN_HEADERINFO STRUCTURE  /EXCEL4AP/PW_KEY_BAPIPLNHDR
+*"      SKF_PLAN_INDEXSTRUCTURE STRUCTURE  /EXCEL4AP/PW_KEY_BAPIACPSTRU
+*"      SKF_PLAN_COOBJECT STRUCTURE  /EXCEL4AP/PW_KEY_BAPIPCPOBJ
+*"      SKF_PLAN_TOTVALUE STRUCTURE  /EXCEL4AP/PW_KEY_BAPISKFTOT
+*"----------------------------------------------------------------------
+
+  data: cost_plan_request type ref to /excel4ap/cl_pw_cost_plan_req,
+        newgl_plan_request type ref to /excel4ap/cl_pw_newgl_req,
+        acto_plan_request type ref to /excel4ap/cl_pw_acto_plan_req,
+        wa_cost_plan_headerinfo type  /excel4ap/pw_key_bapiplnhdr,
+        wa_cost_plan_keyindexstructure type        /excel4ap/pw_key_bapiacpstru,
+        wa_cost_plan_indexstructure type        bapiacpstru,
+        wa_cost_plan_keycoobject type  /excel4ap/pw_key_bapipcpobj,
+        wa_cost_plan_coobject type  bapipcpobj,
+        wa_cost_plan_keytotvalue type  /excel4ap/pw_key_bapipcptot,
+        wa_cost_plan_totvalue type  bapipcptot,
+        wa_newgl_plan_headerinfo type  /excel4ap/pw_key_newglheader,
+        wa_newgl_plan_keyperval type  /excel4ap/pw_key_newglperval,
+        "wa_newgl_plan_perval TYPE  bapibus1600_s_pos_period,
+        wa_newgl_plan_perval type  /excel4ap/bapibus1600_s_ps_per,
+        wa_newgl_plan_keyfieldlist type  /excel4ap/pw_key_newglfldlist,
+        "wa_newgl_plan_fieldlist TYPE  bapibus1600_s_fieldlist,
+        wa_newgl_plan_fieldlist type  /excel4ap/bapibus1600_s_fldlst,
+        wa_acto_plan_headerinfo type  /excel4ap/pw_key_bapiplnhdr,
+        wa_acto_plan_keyindexstructure type        /excel4ap/pw_key_bapiacpstru,
+        wa_acto_plan_indexstructure type        bapiacpstru,
+        wa_acto_plan_keycoobject type  /excel4ap/pw_key_bapiacpobj,
+        wa_acto_plan_coobject type  bapiacpobj,
+        wa_acto_plan_keytotvalue type  /excel4ap/pw_key_bapiacptot,
+        wa_acto_plan_totvalue type  bapiacptot,
+        oref type ref to cx_root,
+        error type /excel4ap/pw_key_bapiret2,
+        message type bapiret2,
+        pca_plan_request type ref to /excel4ap/cl_pw_pca_plan_req,
+        wa_pca_plan_headerinfo type /excel4ap/pw_key_pcaplnhdr,
+        wa_pca_plan_keytotvalue type /excel4ap/pw_key_pcaplnline,
+        wa_pca_plan_totvalue type glpct,
+        skf_plan_request type ref to /excel4ap/cl_pw_skf_plan_req,
+        wa_skf_plan_headerinfo type  /excel4ap/pw_key_bapiplnhdr,
+        wa_skf_plan_keyindexstructure type        /excel4ap/pw_key_bapiacpstru,
+        wa_skf_plan_indexstructure type        bapiacpstru,
+        wa_skf_plan_keycoobject type  /excel4ap/pw_key_bapipcpobj,
+        wa_skf_plan_coobject type  bapipcpobj,
+        wa_skf_plan_keytotvalue type  /excel4ap/pw_key_bapiskftot,
+        wa_skf_plan_totvalue type  bapiskftot.
+
+  field-symbols <i_request> type /excel4ap/pw_key_request.
+
+  refresh return.
+
+  loop at pw_plan_request assigning <i_request>.
+
+    case <i_request>-type.
+
+        "Cost plan
+      when 1.
+
+        try.
+
+            create object cost_plan_request
+              exporting
+                in_id       = <i_request>-id
+                in_type     = <i_request>-type
+                in_delta    = <i_request>-delta
+                in_test_run = <i_request>-testrun.
+
+            loop at cost_plan_headerinfo into wa_cost_plan_headerinfo
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_cost_plan_headerinfo to cost_plan_request->cost_plan_headerinfo.
+            endloop.
+
+            loop at cost_plan_indexstructure into wa_cost_plan_keyindexstructure
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_cost_plan_keyindexstructure to wa_cost_plan_indexstructure.
+              append wa_cost_plan_indexstructure to  cost_plan_request->cost_plan_indexstructure.
+            endloop.
+
+            loop at cost_plan_coobject into wa_cost_plan_keycoobject
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_cost_plan_keycoobject to wa_cost_plan_coobject.
+              append wa_cost_plan_coobject to cost_plan_request->cost_plan_coobject.
+            endloop.
+
+            loop at cost_plan_totvalue into wa_cost_plan_keytotvalue
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_cost_plan_keytotvalue to wa_cost_plan_totvalue.
+              append wa_cost_plan_totvalue to cost_plan_request->cost_plan_totvalue.
+            endloop.
+
+            cost_plan_request->post( ).
+
+            loop at cost_plan_request->return_table into message.
+              error-xl4akey = cost_plan_request->id.
+              move-corresponding message to error.
+              append error to return.
+            endloop.
+
+          catch cx_root into oref.
+
+            error-xl4akey = cost_plan_request->id.
+            error-message = oref->get_text( ).
+            append error to return.
+
+        endtry.
+
+        "Newgl
+      when 2.
+
+        try.
+
+            create object newgl_plan_request
+              exporting
+                in_id       = <i_request>-id
+                in_type     = <i_request>-type
+                in_delta    = <i_request>-delta
+                in_test_run = <i_request>-testrun.
+
+            loop at newgl_headerinfo into wa_newgl_plan_headerinfo
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_newgl_plan_headerinfo to newgl_plan_request->newgl_headerinfo.
+            endloop.
+
+            loop at newgl_perval into wa_newgl_plan_keyperval
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_newgl_plan_keyperval to wa_newgl_plan_perval.
+
+              "Convert GL account
+              call function 'CONVERSION_EXIT_ALPHA_INPUT'
+                exporting
+                  input  = wa_newgl_plan_perval-gl_account
+                importing
+                  output = wa_newgl_plan_perval-gl_account.
+
+              "Convert cost center
+              call function 'CONVERSION_EXIT_ALPHA_INPUT'
+                exporting
+                  input  = wa_newgl_plan_perval-costcenter
+                importing
+                  output = wa_newgl_plan_perval-costcenter.
+
+              "Convert profit center
+              call function 'CONVERSION_EXIT_ALPHA_INPUT'
+                exporting
+                  input  = wa_newgl_plan_perval-profit_ctr
+                importing
+                  output = wa_newgl_plan_perval-profit_ctr.
+
+              append wa_newgl_plan_perval to  newgl_plan_request->newgl_perval.
+            endloop.
+
+            "Add field list
+            wa_newgl_plan_fieldlist-fieldname = 'COSTCENTER'.
+            append wa_newgl_plan_fieldlist to  newgl_plan_request->newgl_fieldlist.
+            wa_newgl_plan_fieldlist-fieldname = 'PROFIT_CTR'.
+            append wa_newgl_plan_fieldlist to  newgl_plan_request->newgl_fieldlist.
+            wa_newgl_plan_fieldlist-fieldname = 'BUS_AREA'.
+            append wa_newgl_plan_fieldlist to  newgl_plan_request->newgl_fieldlist.
+            wa_newgl_plan_fieldlist-fieldname = 'FUNC_AREA'.
+            append wa_newgl_plan_fieldlist to  newgl_plan_request->newgl_fieldlist.
+
+            newgl_plan_request->post( ).
+
+            loop at newgl_plan_request->return_table into message.
+              error-xl4akey = newgl_plan_request->id.
+              move-corresponding message to error.
+              append error to return.
+            endloop.
+
+          catch cx_root into oref.
+
+            error-xl4akey = cost_plan_request->id.
+            error-message = oref->get_text( ).
+            append error to return.
+
+        endtry.
+
+        "Activity price/quantity output
+      when 3.
+
+        try.
+
+            create object acto_plan_request
+              exporting
+                in_id       = <i_request>-id
+                in_type     = <i_request>-type
+                in_delta    = <i_request>-delta
+                in_test_run = <i_request>-testrun.
+
+            loop at act_plan_out_headerinfo into wa_acto_plan_headerinfo
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_acto_plan_headerinfo to acto_plan_request->act_plan_out_headerinfo.
+            endloop.
+
+            loop at act_plan_out_indexstructure into wa_acto_plan_keyindexstructure
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_acto_plan_keyindexstructure to wa_acto_plan_indexstructure.
+              append wa_acto_plan_indexstructure to  acto_plan_request->act_plan_out_indexstructure.
+            endloop.
+
+            loop at act_plan_out_coobject into wa_acto_plan_keycoobject
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_acto_plan_keycoobject to wa_acto_plan_coobject.
+              append wa_acto_plan_coobject to acto_plan_request->act_plan_out_coobject.
+            endloop.
+
+            loop at act_plan_out_totvalue into wa_acto_plan_keytotvalue
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_acto_plan_keytotvalue to wa_acto_plan_totvalue.
+              append wa_acto_plan_totvalue to acto_plan_request->act_plan_out_totvalue.
+            endloop.
+
+            acto_plan_request->post( ).
+
+            loop at acto_plan_request->return_table into message.
+              error-xl4akey = acto_plan_request->id.
+              move-corresponding message to error.
+              append error to return.
+            endloop.
+
+          catch cx_root into oref.
+
+            error-xl4akey = acto_plan_request->id.
+            error-message = oref->get_text( ).
+            append error to return.
+
+        endtry.
+
+        "PCA
+      when 4.
+
+        try.
+
+            create object pca_plan_request
+              exporting
+                in_id       = <i_request>-id
+                in_type     = <i_request>-type
+                in_delta    = <i_request>-delta
+                in_test_run = <i_request>-testrun.
+
+            loop at pca_plan_headerinfo into wa_pca_plan_headerinfo
+              where xl4akey = <i_request>-id.
+              pca_plan_request->docty = wa_pca_plan_headerinfo-docty.
+              pca_plan_request->batch = wa_pca_plan_headerinfo-batch.
+              pca_plan_request->period_from = wa_pca_plan_headerinfo-period_from.
+              pca_plan_request->period_to = wa_pca_plan_headerinfo-period_to.
+            endloop.
+
+            loop at pca_plan_totvalue into wa_pca_plan_keytotvalue
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_pca_plan_keytotvalue to wa_pca_plan_totvalue.
+
+              "Convert GL account
+              call function 'CONVERSION_EXIT_ALPHA_INPUT'
+                exporting
+                  input  = wa_pca_plan_totvalue-racct
+                importing
+                  output = wa_pca_plan_totvalue-racct.
+
+              "Convert profit center
+              call function 'CONVERSION_EXIT_ALPHA_INPUT'
+                exporting
+                  input  = wa_pca_plan_totvalue-rprctr
+                importing
+                  output = wa_pca_plan_totvalue-rprctr.
+
+
+              append wa_pca_plan_totvalue to pca_plan_request->glpct.
+            endloop.
+
+            pca_plan_request->post( ).
+
+            loop at pca_plan_request->return_table into message.
+              error-xl4akey = pca_plan_request->id.
+              move-corresponding message to error.
+              append error to return.
+            endloop.
+
+          catch cx_root into oref.
+
+            error-xl4akey = pca_plan_request->id.
+            error-message = oref->get_text( ).
+            append error to return.
+
+        endtry.
+
+        "SKF plan
+      when 5.
+
+        try.
+
+            create object skf_plan_request
+              exporting
+                in_id       = <i_request>-id
+                in_type     = <i_request>-type
+                in_delta    = <i_request>-delta
+                in_test_run = <i_request>-testrun.
+
+            loop at skf_plan_headerinfo into wa_skf_plan_headerinfo
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_skf_plan_headerinfo to skf_plan_request->skf_plan_headerinfo.
+            endloop.
+
+            loop at skf_plan_indexstructure into wa_skf_plan_keyindexstructure
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_skf_plan_keyindexstructure to wa_skf_plan_indexstructure.
+              append wa_skf_plan_indexstructure to  skf_plan_request->skf_plan_indexstructure.
+            endloop.
+
+            loop at skf_plan_coobject into wa_skf_plan_keycoobject
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_skf_plan_keycoobject to wa_skf_plan_coobject.
+              append wa_skf_plan_coobject to skf_plan_request->skf_plan_coobject.
+            endloop.
+
+            loop at skf_plan_totvalue into wa_skf_plan_keytotvalue
+              where xl4akey = <i_request>-id.
+              move-corresponding wa_skf_plan_keytotvalue to wa_skf_plan_totvalue.
+              append wa_skf_plan_totvalue to skf_plan_request->skf_plan_totvalue.
+            endloop.
+
+            skf_plan_request->post( ).
+
+            loop at skf_plan_request->return_table into message.
+              error-xl4akey = skf_plan_request->id.
+              move-corresponding message to error.
+              append error to return.
+            endloop.
+
+          catch cx_root into oref.
+
+            error-xl4akey = skf_plan_request->id.
+            error-message = oref->get_text( ).
+            append error to return.
+
+        endtry.
+
+    endcase.
+
+  endloop.
+
+  refresh cost_plan_headerinfo.
+  refresh cost_plan_indexstructure.
+  refresh cost_plan_coobject.
+  refresh cost_plan_totvalue.
+  refresh newgl_headerinfo.
+  refresh newgl_perval.
+  refresh newgl_fieldlist.
+  refresh act_plan_out_headerinfo.
+  refresh act_plan_out_indexstructure.
+  refresh act_plan_out_coobject.
+  refresh act_plan_out_totvalue.
+  refresh pca_plan_headerinfo.
+  refresh pca_plan_totvalue.
+  refresh skf_plan_headerinfo.
+  refresh skf_plan_indexstructure.
+  refresh skf_plan_coobject.
+  refresh skf_plan_totvalue.
+
+endfunction.

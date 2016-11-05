@@ -1,0 +1,102 @@
+FUNCTION bapi_projectdef_getlist.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(MAX_ROWS) LIKE  BAPIF4A-MAX_ROWS DEFAULT 0
+*"  EXPORTING
+*"     VALUE(RETURN) LIKE  BAPIRET2 STRUCTURE  BAPIRET2
+*"  TABLES
+*"      PROJECT_DEFINITION_LIST STRUCTURE  BAPIPREXP
+*"      PROJECT_DEFINITION_RANGE STRUCTURE  BAPI_2002_PD_RANGE OPTIONAL
+*"      DESCRIPTION_RANGE STRUCTURE  BAPI_2002_DESCR_RANGE OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA low_tmp LIKE bapi_2002_pd_range-low.
+  DATA high_tmp LIKE bapi_2002_pd_range-high.
+  data: pd_range_cnt   type i,
+        des_range_cnt  type i,
+        pd_list_cnt    type i.
+
+  describe table project_definition_range lines pd_range_cnt.
+  describe table description_range lines des_range_cnt.
+  describe table project_definition_list lines pd_list_cnt.
+
+  if pd_list_cnt = 1 and
+     project_definition_list-project_definition = '*' and
+     pd_range_cnt = 0 and
+     des_range_cnt = 0.
+    project_definition_range-sign   = 'I'.
+    project_definition_range-option = 'CP'.
+    project_definition_range-low    = '*'.
+    append project_definition_range.
+    clear project_definition_range.
+  endif.
+
+  CLEAR return.
+  CLEAR project_definition_list.
+  REFRESH project_definition_list.
+
+  IF max_rows < 0.
+    max_rows = 2147483647 - 2.         " max. Int4
+  ENDIF.
+
+* convert into internal format for project definition
+* e.g. the project has an edit mask
+  LOOP AT project_definition_range.
+
+*   we don't want to convert into internal format, if we
+*   are using wildcards like *
+    IF project_definition_range-option = 'CP'.
+      IF project_definition_range-low CS '*' OR
+        project_definition_range-high CS '*'.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+    CALL FUNCTION 'CONVERSION_EXIT_PROJN_INPUT'
+         EXPORTING
+              input         = project_definition_range-low
+         IMPORTING
+              output        = project_definition_range-low
+         EXCEPTIONS
+              error_message = 1
+              OTHERS        = 2.
+
+    CALL FUNCTION 'CONVERSION_EXIT_PROJN_INPUT'
+         EXPORTING
+              input         = project_definition_range-high
+         IMPORTING
+              output        = project_definition_range-high
+         EXCEPTIONS
+              error_message = 1
+              OTHERS        = 2.
+
+    MODIFY project_definition_range.
+  ENDLOOP.
+
+
+* select from database
+  SELECT  pspid  post1
+    UP TO max_rows ROWS
+    INTO TABLE project_definition_list
+    FROM  proj
+    WHERE
+      pspid IN project_definition_range AND
+      post1 IN description_range
+      ORDER BY pspid.
+
+* set the edit mask
+  LOOP AT project_definition_list.
+    CALL FUNCTION 'CONVERSION_EXIT_PROJN_OUTPUT'
+         EXPORTING
+              input         = project_definition_list-project_definition
+         IMPORTING
+              output        = project_definition_list-project_definition
+         EXCEPTIONS
+              error_message = 1
+              OTHERS        = 2.
+
+    MODIFY project_definition_list.
+  ENDLOOP.
+
+ENDFUNCTION.

@@ -1,0 +1,30 @@
+FUNCTION /EXCEL4AP/CON_VERSION.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  EXPORTING
+*"     VALUE(VERSION) TYPE  STRING
+*"----------------------------------------------------------------------
+
+
+*{   INSERT         DEVK900059                                        1
+*
+* Excel4Apps connector version - Excel4Apps use only
+* Author: Grant Peterson
+* 3.1 Added GLW Get Data 1
+* 4.0 Added Reports Wand
+* 4.06 Added customer/vendor capability, projects enhancements
+* 4.13 Added option for all entries on cache function
+* 4.19 Connector search help added
+* 4.20 Server authorization enhancement
+* 4.21 Enhanced processing
+* Syncing with GLW 4.27 server for COPA
+* Syncing with GLW 4.34
+* Syncing with GLW 4.35
+* New web version 4.40
+
+VERSION = '4.40'.
+
+*}   INSERT
+
+
+ENDFUNCTION.

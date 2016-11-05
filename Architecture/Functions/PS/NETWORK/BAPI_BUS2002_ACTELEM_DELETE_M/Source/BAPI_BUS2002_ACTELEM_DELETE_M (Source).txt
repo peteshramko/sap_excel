@@ -1,0 +1,173 @@
+function bapi_bus2002_actelem_delete_m.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_NUMBER) LIKE  BAPI_NETWORK_LIST-NETWORK
+*"  TABLES
+*"      IT_DELETE_ACT_ELEMENT STRUCTURE  BAPI_ACTELEMENT_LIST
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+  data: lv_key               type char24,
+        lv_ael(4)             type c,
+        lv_dialog_status_tmp type flag,
+        lv_msghand_num       like sy-uzeit,
+        lv_msgnum            like sy-uzeit,
+        lv_subrc             like sy-subrc,
+        lv_error             type c,
+        ls_object            type psguid_ts_guid_for_extern,
+        lt_act_element       type table of bapi_actelement_list with
+header line.
+
+  lt_act_element[]        = it_delete_act_element[].
+
+  sort lt_act_element.
+  delete adjacent duplicates from lt_act_element.
+
+* Init BAPI*************************************************************
+* Exception 'message_handler_error' is NOT caught by design to force a
+* dump as we deal with a program error in this case
+  call function 'PS_BAPI_INITIALIZE'
+       importing
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       tables
+            return          = et_return.
+
+* Prepare BAPI**********************************************************
+  call function 'PS_BAPI_PREPARE'
+       exporting
+            i_number                 = i_number
+            i_method                 = con_ael_delete
+       importing
+            e_number                 = i_number
+       tables
+            it_act_element_delete    = lt_act_element
+            extensionin              = extensionin
+            extensionout             = extensionout
+       exceptions
+            precommit_already_called = 1
+            init_missing             = 2
+            network_read_error       = 3
+            one_project_violation    = 4
+            badi_error               = 5.
+  lv_subrc = sy-subrc.
+  if not lv_subrc is initial.
+*   In case of prepare error, keep its messages for ALL objects of
+*   the loop. This is achieved by not resetting the log processing the
+*   first file, i.e. by using SPACE as message handler number
+*   Prepare failed: convert network number
+    call function 'EXT_NETWORK_GET_INT_NETWORK'
+         exporting
+              i_ext_network = i_number
+         importing
+              e_int_network = i_number
+         exceptions
+              error_occured = 0.
+    clear lv_msgnum.
+  else.
+    lv_msgnum = lv_msghand_num.
+  endif.
+
+* process activities one by one ...*************************************
+  loop at  lt_act_element.
+    call function 'CONVERSION_EXIT_NUMCV_INPUT'
+         exporting
+              input  = lt_act_element-element
+         importing
+              output = lv_ael.
+    concatenate i_number lv_ael into lv_key
+                         separated by space.
+* check if activity element can be deleted ...
+    if lv_subrc is initial.
+      call function 'BUS2002_ACT_ELEMENT_DELETE'
+           exporting
+                i_aufnr       = i_number
+                i_uvorn       = lt_act_element-element
+           exceptions
+                error_occured = 1.
+    endif.
+    if not sy-subrc is initial or lv_subrc <> 0.
+*     Error in prepare or whilst creation
+      lv_error = con_yes.
+      message e011(cnif_pi) with text-ael lv_key into null.
+      call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+           exporting
+                i_error = con_yes.
+*     Delete current activity in error case to force late BAdI only for
+*     success cases
+      delete lt_act_element.
+    else.
+*     Delete successful
+      clear lv_error.
+      message s072(cnif_pi) with text-ael lv_key
+                            into null.
+      call function 'PS_FLAG_SET_GLOBAL_FLAGS'
+           exporting
+                i_network_data = con_yes.
+*     Register object in success buffer table
+      clear ls_object.
+      ls_object-object_type = con_objtype_element.
+      ls_object-network     = i_number.
+      ls_object-element     = lt_act_element-element.
+      ls_object-vbkz        = con_ael_delete.
+      call function 'PS_BAPI_SUCCESS_BT_APPEND'
+           exporting
+                i_object         = ls_object
+           exceptions
+                wrong_parameters = 0.
+    endif.
+*   Get last message of current activity element ('S' vs. 'E') as first
+*   one in the log (only 'message ... into null' NOT followed by
+*   'perform put_sy_message(saplco2o)')
+    call function 'PS_BAPI_MESSAGE_APPEND'
+         tables
+              return = et_return.
+*   Get remaining messages of current activity element (stored by
+*   'message ... into null' AND 'perform put_sy_message(saplco2o)')
+    call function 'PS_BAPI_APPL_MESSAGE_APP_EXT'
+         exporting
+              i_objectkey   = lv_key
+              i_msghand_num = lv_msgnum
+              i_error_case  = lv_error
+         tables
+              et_return     = et_return.
+  endloop.
+
+* In case of prepare error, LV_MSGNUM is SPACE and its messages are
+* still in the log. Delete them now (after the LOOP) to avoid them to
+* re-appear in the possibly written late BAdI-Log
+  if     lv_msgnum      is initial and
+     not lv_msghand_num is initial.
+    call function 'METHOD_LOG_INIT'
+         exporting
+              msghand_num = lv_msghand_num.
+  endif.
+
+* Within PS_BAPI_POST, skip late BAdI completely (controlled by
+* I_SUBRC) if
+* - prepare failed (LV_SUBRC is already not initial)
+* - prepare did not fail but nevertheless no success file exists
+*   (LT_ACT_ELEMENT is empty and LV_SUBRC is hence set)
+* Otherwise, only for success files (contents of LT_ACT_ELEMENT)
+  if lv_subrc         is initial and
+     lt_act_element[] is initial.
+    lv_subrc = 4.
+  endif.
+
+* Finish BAPI
+  call function 'PS_BAPI_FINISH'
+       exporting
+            i_number              = i_number
+            i_dialog_status       = lv_dialog_status_tmp
+            i_msghand_num         = lv_msghand_num
+            i_method              = con_act_delete
+            i_subrc               = lv_subrc
+       tables
+            it_act_element_delete = it_delete_act_element
+            return                = et_return
+            extensionin           = extensionin
+            extensionout          = extensionout.
+
+endfunction.

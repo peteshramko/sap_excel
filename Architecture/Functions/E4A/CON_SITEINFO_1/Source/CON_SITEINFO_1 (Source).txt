@@ -1,0 +1,69 @@
+FUNCTION /EXCEL4AP/CON_SITEINFO_1.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  EXPORTING
+*"     VALUE(LICENCE) TYPE  STRING
+*"     VALUE(SAPDATE) TYPE  DATE
+*"     VALUE(HOSTNAME) TYPE  /EXCEL4AP/TEXT50
+*"----------------------------------------------------------------------
+
+*{   INSERT         DEVK900059                                        1
+*
+* Excel4Apps connector site information - Excel4Apps use only
+* Author: Grant Peterson
+* Version: 1.00
+
+  DATA: WA_TFDIR TYPE TFDIR,
+        LT_SYS_TABL  LIKE MSXXLIST OCCURS 0,
+        LWA_SYS_TABL LIKE MSXXLIST.
+
+  "Call standard SAP function to retrieve installation number
+  CALL FUNCTION 'SLIC_GET_LICENCE_NUMBER'
+    IMPORTING
+      LICENSE_NUMBER = LICENCE.
+
+  "Get the system date
+  SAPDATE = SY-DATUM.
+
+  "Get the domain if possible.
+  SELECT SINGLE * FROM TFDIR INTO WA_TFDIR
+    WHERE FUNCNAME = 'MS_GET_LOGON'.
+  IF SY-SUBRC = 0.
+
+    "Get the available server
+    CALL FUNCTION 'RFC_GET_LOCAL_SERVERS'
+      TABLES
+        HOSTS         = LT_SYS_TABL
+      EXCEPTIONS
+        NOT_AVAILABLE = 1
+        OTHERS        = 2.
+    IF SY-SUBRC = 0.
+      LOOP AT LT_SYS_TABL INTO LWA_SYS_TABL.
+        IF LWA_SYS_TABL-SERV(5) = 'SAPDP'
+          AND NOT LWA_SYS_TABL-NAME IS INITIAL.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+      IF NOT LWA_SYS_TABL-NAME IS INITIAL.
+        CALL FUNCTION 'MS_GET_LOGON'
+          EXPORTING
+            NAME           = LWA_SYS_TABL-NAME
+            LOGON_TYPE     = 2
+          IMPORTING
+            HOST           = HOSTNAME
+          EXCEPTIONS
+            NOT_AUTHORIZED = 1
+            INTERNAL_ERROR = 2
+            NOT_FOUND      = 3
+            EINVAL         = 4
+            UNKNOWN_SERVER = 5
+            OTHERS         = 6.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+*}   INSERT
+
+
+
+ENDFUNCTION.

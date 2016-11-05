@@ -1,0 +1,244 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{124DFD7F-A466-4CCF-91FA-658B95D9E99A}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>iiiwave.MatManLib</RootNamespace>
+    <AssemblyName>iiiwave.MatManLib</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <RegisterForComInterop>true</RegisterForComInterop>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="sapnco">
+      <HintPath>sapnco\NET_4_64bit\sapnco.dll</HintPath>
+    </Reference>
+    <Reference Include="sapnco_utils">
+      <HintPath>sapnco\NET_4_64bit\sapnco_utils.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Caching" />
+    <Reference Include="System.Windows" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AppCode\Application Server\ClearValues.cs" />
+    <Compile Include="AppCode\Application Server\FormatArrayString.cs" />
+    <Compile Include="AppCode\Connection\SapSessionProvider.cs" />
+    <Compile Include="AppCode\Functions\Group\IFunctionGroup.cs" />
+    <Compile Include="AppCode\Application Server\FunctionGroups.cs" />
+    <Compile Include="AppCode\Application Server\MatManErrorDictionary.cs" />
+    <Compile Include="AppCode\Application Server\MatManExtensions.cs" />
+    <Compile Include="AppCode\Application Server\MatManFunctionCollection.cs" />
+    <Compile Include="AppCode\Application Server\MatManReturnValueDictionary.cs" />
+    <Compile Include="AppCode\Functions\Group\PlanningFunctionGroup.cs" />
+    <Compile Include="AppCode\Functions\Group\QueryFunctionGroup.cs" />
+    <Compile Include="AppCode\Application Server\SAPRequest.cs" />
+    <Compile Include="AppCode\Components\DropDownRefControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AppCode\Components\DropDownRefControl.Designer.cs">
+      <DependentUpon>DropDownRefControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AppCode\Components\RefEditControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AppCode\Components\RefEditControl.Designer.cs">
+      <DependentUpon>RefEditControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AppCode\Components\RefEditState.cs" />
+    <Compile Include="AppCode\Connection\SapConnection.cs" />
+    <Compile Include="AppCode\Connection\SapLogonConfig.cs" />
+    <Compile Include="AppCode\Data\DataCache.cs" />
+    <Compile Include="AppCode\Data\MatManDataSchema.cs" />
+    <Compile Include="AppCode\Data\QueryToCache.cs" />
+    <Compile Include="AppCode\Functions\Planning\ActivityPlan.cs" />
+    <Compile Include="AppCode\Functions\Planning\GetPlanningData.cs" />
+    <Compile Include="AppCode\Functions\IMatManFunction.cs" />
+    <Compile Include="AppCode\Application Server\MatManCompareFunction.cs" />
+    <Compile Include="AppCode\Functions\Planning\CostPlan.cs" />
+    <Compile Include="AppCode\Functions\Planning\IPlanningFunction.cs" />
+    <Compile Include="AppCode\Functions\Planning\PurchasingPlan.cs" />
+    <Compile Include="AppCode\Functions\Query\GetQueryData.cs" />
+    <Compile Include="AppCode\MatManTypes.cs" />
+    <Compile Include="AppCode\Functions\Query\IQueryFunction.cs" />
+    <Compile Include="AppCode\Math\Combinatorics.cs" />
+    <Compile Include="AppCode\Math\MathUtils.cs" />
+    <Compile Include="AppCode\SAP Tables\ISAPQueryTable.cs" />
+    <Compile Include="AppCode\SAP Tables\ISAPTable.cs" />
+    <Compile Include="AppCode\SAP Tables\ProjectDefStructure.cs" />
+    <Compile Include="AppCode\SAP Tables\ProjectTable.cs" />
+    <Compile Include="AppCode\Utilities\LogFile.cs" />
+    <Compile Include="AppCode\Utilities\MatManEventLogging.cs" />
+    <Compile Include="AppCode\Utilities\Utils.cs" />
+    <Compile Include="Forms\ReturnProgressDataForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\ReturnProgressDataForm.Designer.cs">
+      <DependentUpon>ReturnProgressDataForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\SapLogonForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\SapLogonForm.Designer.cs">
+      <DependentUpon>SapLogonForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\UserOptionsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\UserOptionsForm.Designer.cs">
+      <DependentUpon>UserOptionsForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Localization\Localize.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Localize.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Localization\Localize.en-US.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Localize.en-US.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Localization\Localize.en-UK.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Localize.en-UK.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Localization\Localize.fr-FR.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Localize.fr-FR.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
+    <Compile Include="Settings.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <COMReference Include="Microsoft.Office.Core">
+      <Guid>{2DF8D04C-5BFA-101B-BDE5-00AA0044DE52}</Guid>
+      <VersionMajor>2</VersionMajor>
+      <VersionMinor>8</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>primary</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </COMReference>
+    <COMReference Include="Microsoft.Office.Interop.Excel">
+      <Guid>{00020813-0000-0000-C000-000000000046}</Guid>
+      <VersionMajor>1</VersionMajor>
+      <VersionMinor>9</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>primary</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </COMReference>
+    <COMReference Include="VBIDE">
+      <Guid>{0002E157-0000-0000-C000-000000000046}</Guid>
+      <VersionMajor>5</VersionMajor>
+      <VersionMinor>3</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>primary</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="AppCode\Components\DropDownRefControl.resx">
+      <DependentUpon>DropDownRefControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="AppCode\Components\RefEditControl.resx">
+      <DependentUpon>RefEditControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forms\ReturnProgressDataForm.resx">
+      <DependentUpon>ReturnProgressDataForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forms\SapLogonForm.resx">
+      <DependentUpon>SapLogonForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forms\UserOptionsForm.resx">
+      <DependentUpon>UserOptionsForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Localization\Localize.en-US.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Localize.en-US.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Localization\Localize.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Localize.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Localization\Localize.en-UK.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Localize.en-UK.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Localization\Localize.fr-FR.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Localize.fr-FR.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="AppCode\Functions\Post\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Resources\imgMaximized.bmp" />
+    <Content Include="Resources\imgMinimized.bmp" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

@@ -1,0 +1,43 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui">
+	<ribbon>
+		<tabs>
+              <tab id="matManTab" label="MatMan for Projects" getVisible="isLoggedOn">
+                <group id="matman_FunctionGroup" label="Insert Function">
+                    <button id="matman_PostCostButton" label="Post Cost Plan" size="large" 
+                            screentip="Open the Cost Plan wizard" getEnabled="matman_getEnabled"
+                            onAction="matman_CostPlanClick" />
+                    <button id="matman_PostActivityButton" label="Post Activity Plan" size="large" 
+                            screentip="Open the Activity plan wizard" getEnabled="matman_getEnabled"
+                            onAction="matman_ActivityPlanClick" />
+                </group>
+                <group id="matman_ActionGroup" label="Upload Options">
+                    <dropDown id="matman_ActionDropDown" label="Upload Options" showImage="false"
+                              getEnabled="matman_getEnabled" getSelectedItemID="matman_ActionDropDown_GetSelectedItemID" 
+                              onAction="mat_man_ActionDropDown_OnAction">
+                        <item id="matman_ValidateOnly" label="Validate Only" />
+                        <item id="matman_ValidateAndPost" label="Validate and Post" />
+                    </dropDown>
+                </group>                
+                <group id="matman_LoadGroup" label="Post Plan Values">
+                    <button id="matman_LoadRangeBtn" label="Range" size="large"
+                            screentip="Post Range to SAP"
+                            getEnabled="matman_getEnabled" onAction="matman_PostRangeButtonClick" />
+                    <button id="matman_LoadSheetBtn" label="Sheet" size="large"
+                            screentip="Post Sheet to SAP"
+                            getEnabled="matman_getEnabled" onAction="matman_PostSheetButtonClick" />
+                    <button id="matman_PostWorkbookBtn" label="Workbook" size="large"
+                            screentip="Post Workbook to SAP"
+                            getEnabled="matman_getEnabled" onAction="matman_WorkbookButtonClick" />
+                </group>
+                <group id="matman_OptionsGroup" label="Tools">
+                   <button id="matman_OptionsButton" label="Options" size="large" 
+                            screentip="User Options" getEnabled="matman_getEnabled"
+                            onAction="matman_UserOptionsClick" />
+			 <button id="matman_ShowHelpButton" label="Help" size="large" 
+                            screentip="Help" onAction="matman_HelpMenuClick" />
+
+                </group>
+              </tab>
+		</tabs>
+	</ribbon>
+</customUI>

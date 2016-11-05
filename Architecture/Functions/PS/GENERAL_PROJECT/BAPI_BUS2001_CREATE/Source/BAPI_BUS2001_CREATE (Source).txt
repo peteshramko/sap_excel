@@ -1,0 +1,123 @@
+FUNCTION bapi_bus2001_create.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_PROJECT_DEFINITION) LIKE  BAPI_BUS2001_NEW STRUCTURE
+*"        BAPI_BUS2001_NEW
+*"  TABLES
+*"      ET_RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: lv_key               TYPE char24,
+        lv_dialog_status_tmp TYPE c,
+        lv_msghand_num       LIKE sy-uzeit,
+        lv_subrc             LIKE sy-subrc,
+        ls_object            TYPE psguid_ts_guid_for_extern.
+
+* Exception 'message_handler_error' is NOT caught by design to force a
+* dump as we deal with a program error in this case
+  CALL FUNCTION 'PS_BAPI_INITIALIZE'
+       IMPORTING
+            e_dialog_status = lv_dialog_status_tmp
+            e_msghand_num   = lv_msghand_num
+       TABLES
+            return          = et_return.
+
+* prepare BAPI, call early badi
+  CALL FUNCTION 'PS_BAPI_PREPARE'
+       EXPORTING
+            i_project_name    = i_project_definition-project_definition
+            i_project_definition_create = i_project_definition
+            i_method                    = con_pro_create
+       IMPORTING
+            e_project_name    = i_project_definition-project_definition
+       TABLES
+            extensionin                 = extensionin
+            extensionout                = extensionout
+       EXCEPTIONS
+            precommit_already_called    = 1
+            init_missing                = 2
+            one_project_violation       = 3
+            badi_error                  = 4
+            project_read_error          = 5.
+  lv_subrc = sy-subrc.
+
+* if prepare was successful, try to create project
+  IF lv_subrc IS INITIAL.
+    CALL FUNCTION 'CJ2001_CREATE'
+         EXPORTING
+              i_project_definition = i_project_definition
+         TABLES
+              extensionin          = extensionin
+         EXCEPTIONS
+              project_not_created  = 1.
+    lv_subrc = sy-subrc.
+  else.
+*   Prepare failed: convert project definition
+    CALL FUNCTION 'CONVERSION_EXIT_ABPSN_INPUT'
+         EXPORTING
+              input         = i_project_definition-project_definition
+         IMPORTING
+              output        = i_project_definition-project_definition
+         EXCEPTIONS
+              error_message = 0.
+  ENDIF.
+
+  IF lv_subrc <> 0.
+    MESSAGE e007(cnif_pi) WITH text-pro
+            i_project_definition-project_definition INTO null.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+  ELSE.
+    MESSAGE s004(cnif_pi) WITH text-pro
+            i_project_definition-project_definition INTO null.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_wbs_data = con_yes.
+*   Register object in success buffer table
+    CLEAR ls_object.
+    ls_object-object_type        = con_objtype_project.
+    ls_object-project_definition =
+                              i_project_definition-project_definition.
+    ls_object-vbkz               = con_pro_create.
+    CALL FUNCTION 'PS_BAPI_SUCCESS_BT_APPEND'
+         EXPORTING
+              i_object         = ls_object
+         EXCEPTIONS
+              wrong_parameters = 0.
+  ENDIF.
+
+* Get last message of current project ('S' vs. 'E') as first one in
+* the log (only 'message ... into null' NOT followed by 'perform
+* put_sy_message(saplco2o)')
+  CALL FUNCTION 'PS_BAPI_MESSAGE_APPEND'
+       TABLES
+            return = et_return.
+* sy-msgv2 contains the converted project definition
+  lv_key = sy-msgv2.
+* Get remaining messages of current method (stored by 'message ...
+* into null' AND 'perform put_sy_message(saplco2o)')
+  CALL FUNCTION 'PS_BAPI_APPL_MESSAGE_APPEND'
+       EXPORTING
+            objectkey     = lv_key
+            i_msghand_num = lv_msghand_num
+       TABLES
+            return        = et_return.
+
+* Finish BAPI - call late badi, reset dialog flags
+  CALL FUNCTION 'PS_BAPI_FINISH'
+       EXPORTING
+            i_project_definition_create = i_project_definition
+            i_dialog_status             = lv_dialog_status_tmp
+            i_msghand_num               = lv_msghand_num
+            i_method                    = con_pro_create
+            i_subrc                     = lv_subrc
+       TABLES
+            return                      = et_return
+            extensionin                 = extensionin
+            extensionout                = extensionout.
+
+ENDFUNCTION.

@@ -1,0 +1,291 @@
+FUNCTION bapi_po_create.                                    "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(PO_HEADER) LIKE  BAPIEKKOC STRUCTURE  BAPIEKKOC
+*"     VALUE(PO_HEADER_ADD_DATA) LIKE  BAPIEKKOA STRUCTURE  BAPIEKKOA
+*"       OPTIONAL
+*"     VALUE(HEADER_ADD_DATA_RELEVANT) LIKE  BAPIMMPARA-SELECTION
+*"       OPTIONAL
+*"     VALUE(PO_ADDRESS) LIKE  BAPIADDRESS STRUCTURE  BAPIADDRESS
+*"       OPTIONAL
+*"     VALUE(SKIP_ITEMS_WITH_ERROR) LIKE  BAPIMMPARA-SELECTION DEFAULT
+*"       'X'
+*"     VALUE(ITEM_ADD_DATA_RELEVANT) LIKE  BAPIMMPARA-SELECTION
+*"       OPTIONAL
+*"     VALUE(HEADER_TECH_FIELDS) LIKE  BAPITECH STRUCTURE  BAPITECH
+*"       OPTIONAL
+*"  EXPORTING
+*"     VALUE(PURCHASEORDER) LIKE  BAPIEKKOC-PO_NUMBER
+*"  TABLES
+*"      PO_ITEMS STRUCTURE  BAPIEKPOC
+*"      PO_ITEM_ADD_DATA STRUCTURE  BAPIEKPOA OPTIONAL
+*"      PO_ITEM_SCHEDULES STRUCTURE  BAPIEKET
+*"      PO_ITEM_ACCOUNT_ASSIGNMENT STRUCTURE  BAPIEKKN OPTIONAL
+*"      PO_ITEM_TEXT STRUCTURE  BAPIEKPOTX OPTIONAL
+*"      RETURN STRUCTURE  BAPIRETURN OPTIONAL
+*"      PO_LIMITS STRUCTURE  BAPIESUHC OPTIONAL
+*"      PO_CONTRACT_LIMITS STRUCTURE  BAPIESUCC OPTIONAL
+*"      PO_SERVICES STRUCTURE  BAPIESLLC OPTIONAL
+*"      PO_SRV_ACCASS_VALUES STRUCTURE  BAPIESKLC OPTIONAL
+*"      PO_SERVICES_TEXT STRUCTURE  BAPIESLLTX OPTIONAL
+*"      PO_BUSINESS_PARTNER STRUCTURE  BAPIEKKOP OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      POADDRDELIVERY STRUCTURE  BAPIMEPOADDRDELIVERY OPTIONAL
+*"----------------------------------------------------------------------
+ENHANCEMENT-POINT BAPI_PO_CREATE_G8 SPOTS ES_SAPLMEWP STATIC.
+*$*$-Start: BAPI_PO_CREATE_G8-------------------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_PO_CREATE.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE_G8-------------------------------------------------------------------$*$*
+
+ENHANCEMENT-POINT BAPI_PO_CREATE_G6 SPOTS ES_SAPLMEWP.
+*$*$-Start: BAPI_PO_CREATE_G6-------------------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_PO_CREATE.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050216
+T_MGV_FNAMES1-INT = 'PUR_MAT'.
+T_MGV_FNAMES1-EXT = 'PUR_MAT_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'PUR_MAT_VERSION'.
+T_MGV_FNAMES1-GUID = 'PUR_MAT_GUID'.
+APPEND T_MGV_FNAMES1.
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE_G6-------------------------------------------------------------------$*$*
+
+* docu: ==============
+* docu: BAPI_PO_CREATE
+* docu: ==============
+
+* generate data record
+  fbgenmac 'BAPI_PO_CREATE'.                         "#EC NEEDED "#EC *
+
+  DATA: l_common_plant   LIKE ekpo-werks,
+        l_common_vsr     LIKE ekpo-ltsnr,
+        lt_itemaddrzav   TYPE mepoitemaddrzav OCCURS 0 WITH HEADER LINE,
+        po_header_ch     LIKE bapiekkoc,
+        po_address_ch    LIKE bapiaddress,
+        po_header_add_ch LIKE bapiekkoa,
+        ls_header_tech   LIKE bapitech.
+* define local macro
+  DEFINE transaction_abort.
+    if exitflag ne space.
+      macro_abort.
+      exit.
+    endif.
+    check exitflag eq space.
+  END-OF-DEFINITION.
+
+* docu: initialize
+* refresh all internal fields and tables
+  CLEAR: return, cekko, cekpo, ceket, cekkn, cadr, cesll, ceskl, cesuh,
+         cesuc.
+  REFRESH: return, ceket, cekkn, cesll, ceskl, cesuh, cesuc.
+  PERFORM po_refresh TABLES return.
+  CALL FUNCTION 'MS_REFRESH_STORAGE'.
+  CHECK exitflag EQ space.
+  CLEAR transaction_id.
+
+* Assigning BAPI-execution.
+  bapi_mode = 'X'.
+
+* get transaction ID for IDOC-creation
+  macro_start.
+
+* docu: customer exit - INBOUND (Exit 002)
+  DATA: h_abort LIKE ekpo-loekz.
+  CLEAR h_abort.
+  CALL CUSTOMER-FUNCTION '002'
+       EXPORTING
+            po_header                  = po_header
+            po_address                 = po_address
+            po_header_add_data         = po_header_add_data
+       IMPORTING
+            abort                      = h_abort
+            po_header_changed          = po_header_ch
+            po_address_changed         = po_address_ch
+            po_header_add_changed      = po_header_add_ch
+          TABLES
+            po_items                   = po_items
+            po_item_add_data           = po_item_add_data
+            po_item_schedules          = po_item_schedules
+            po_item_account_assignment = po_item_account_assignment
+            po_item_text               = po_item_text
+            po_limits                  = po_limits
+            po_contract_limits         = po_contract_limits
+            po_services                = po_services
+            po_srv_accass_values       = po_srv_accass_values
+            po_services_text           = po_services_text
+            po_return                  = return
+            extensionin                = extensionin
+            po_addrdelivery            = poaddrdelivery
+       EXCEPTIONS
+            OTHERS                     = 0.
+
+  IF NOT h_abort IS INITIAL.
+    macro_abort. EXIT.
+  ELSE.
+    IF sy-subrc NE 0.
+      PERFORM fill_bapireturn TABLES return
+                              USING  'E'
+                                     'W5'
+                                     '061'
+                                     'EXIT_SAPLMEWP_002'
+                                     space
+                                     space
+                                     space.
+      IF 1 = 2. MESSAGE e061(w5) WITH ''. ENDIF.
+      macro_abort. EXIT.
+    ENDIF.
+  ENDIF.
+
+* check for header changes from customer function
+  IF NOT po_header_ch IS INITIAL.
+    CLEAR po_header.
+    MOVE-CORRESPONDING po_header_ch TO po_header.
+  ENDIF.
+
+* check for header address changes from customer function
+  IF NOT po_address_ch IS INITIAL.
+    CLEAR po_address.
+    MOVE-CORRESPONDING po_address_ch TO po_address.
+  ENDIF.
+
+* docu: inbound mapping - header
+* fill PO_HEADER in the internal structure CEKKO
+  PERFORM po_header_to_cekko TABLES return USING po_header cekko.
+
+* check for additional header data changes from customer function
+  IF NOT po_header_add_ch IS INITIAL.
+    CLEAR po_header_add_data.
+    MOVE-CORRESPONDING po_header_add_ch TO po_header_add_data.
+  ENDIF.
+
+* docu: inbound mapping - partner
+* Check if there are partner roles to be evaluated
+  PERFORM po_business_partner_to_cekko TABLES   po_business_partner
+                                                return
+                                       CHANGING cekko.
+
+* docu: inbound mapping - header address
+* fill PO_ADDRESS in internal structure CADR
+  PERFORM po_address_to_cadr USING po_address cadr.
+
+* docu: inbound mapping - header, additional data
+* fill PO_HEADER additional data in the internal structure TEKKO
+  PERFORM po_header_to_tekko USING po_header_add_data
+                                   tekko
+                                   header_add_data_relevant
+                                   tekkorel.
+
+* check whether the items have a common plant and/or vendor subrange
+  PERFORM po_header_plant_and_vsr TABLES   po_items
+                                  USING    cekko
+                                  CHANGING l_common_plant
+                                           l_common_vsr.
+
+* docu: inbound mapping - extensionin (header)
+* fill customer extensions of the header (table ekko)
+  PERFORM po_header_extensionin TABLES extensionin
+                                       return
+                              CHANGING cekko.
+
+* docu: inbound mapping - HEADER_TECH_FIELDS
+  IF NOT header_tech_fields IS INITIAL.
+    MOVE-CORRESPONDING header_tech_fields TO ls_header_tech.
+  ENDIF.
+  transaction_abort.
+* docu: generate PO header -> PO_HEADER_GENERATE
+  PERFORM po_header_generate TABLES return
+                             USING cekko tekko po_address cadr
+                                   l_common_plant l_common_vsr
+                                   ls_header_tech.
+
+  transaction_abort.
+* docu: inbound mapping - item address
+* convert item address (delivery)
+  PERFORM move_item_addr_in TABLES poaddrdelivery
+                                   lt_itemaddrzav
+                            USING  cekko-ebeln.
+  PERFORM create_item_addr  TABLES lt_itemaddrzav
+                                   po_items
+                                   return.
+
+* docu: generate PO items  -> PO_ITEM_GENERATE
+* generate the several po items
+  PERFORM po_item_generate TABLES po_items
+                                  po_item_add_data
+                                  po_item_schedules
+                                  po_item_account_assignment
+                                  po_item_text
+                                  po_limits
+                                  po_contract_limits
+                                  po_services
+                                  po_srv_accass_values
+                                  po_services_text
+                                  extensionin
+                                  return
+                           USING  skip_items_with_error
+                                  item_add_data_relevant
+                                  tekporel.
+  transaction_abort.
+* docu: texts
+* post the po_item_texts
+  PERFORM po_item_texts TABLES po_item_text
+                        USING cekko-ebeln.
+
+* docu: post PO
+* post the po
+  PERFORM po_post TABLES return
+                  USING purchaseorder.
+
+* end transaction when PO could not be created
+  IF purchaseorder IS INITIAL.
+    macro_abort. EXIT.
+  ENDIF.
+
+* refresh tables for statisitics after PO creation
+  CALL FUNCTION 'ME_STATISTICS_TABLES_REFRESH'
+    EXPORTING
+      i_ebeln = purchaseorder
+    EXCEPTIONS
+      OTHERS  = 1.
+
+ENHANCEMENT-POINT bapi_po_create_01 SPOTS es_saplmewp.
+*$*$-Start: BAPI_PO_CREATE_01-------------------------------------------------------------------$*$*
+ENHANCEMENT 1  OIA_SAPLMEWP.    "active version
+CHECK I_NO_COMMIT NE 'X'.                                 "SO5K000056
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE_01-------------------------------------------------------------------$*$*
+
+* end of transaction - IDOC-creation or directly COMMIT WORK
+  macro_end.
+
+ENHANCEMENT-POINT BAPI_PO_CREATE_G7 SPOTS ES_SAPLMEWP.
+*$*$-Start: BAPI_PO_CREATE_G7-------------------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_PO_CREATE.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = PO_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE_G7-------------------------------------------------------------------$*$*
+ENDFUNCTION.

@@ -1,0 +1,687 @@
+function bapi_project_getinfo.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(PROJECT_DEFINITION) LIKE  BAPIPR-PROJECT_DEFINITION
+*"       OPTIONAL
+*"     VALUE(WITH_ACTIVITIES) LIKE  BAPIPR-WITH_ACTIVITIES OPTIONAL
+*"     VALUE(WITH_MILESTONES) LIKE  BAPIPR-WITH_MILESTONES OPTIONAL
+*"     VALUE(WITH_SUBTREE) LIKE  BAPIPR-WITH_SUBTREE OPTIONAL
+*"  EXPORTING
+*"     VALUE(E_PROJECT_DEFINITION) LIKE  BAPI_PROJECT_DEFINITION_EX
+*"       STRUCTURE  BAPI_PROJECT_DEFINITION_EX
+*"     VALUE(RETURN) LIKE  BAPIRETURN1 STRUCTURE  BAPIRETURN1
+*"  TABLES
+*"      I_WBS_ELEMENT_TABLE STRUCTURE  BAPI_WBS_ELEMENTS OPTIONAL
+*"      E_WBS_ELEMENT_TABLE STRUCTURE  BAPI_WBS_ELEMENT_EXP OPTIONAL
+*"      E_WBS_MILESTONE_TABLE STRUCTURE  BAPI_WBS_MILESTONE_EXP
+*"       OPTIONAL
+*"      E_WBS_HIERARCHIE_TABLE STRUCTURE  BAPI_WBS_HIERARCHIE OPTIONAL
+*"      E_ACTIVITY_TABLE STRUCTURE  BAPI_NETWORK_ACTIVITY_EXP OPTIONAL
+*"      E_MESSAGE_TABLE STRUCTURE  BAPI_METH_MESSAGE OPTIONAL
+*"----------------------------------------------------------------------
+
+* Logische Datenbank rufen
+  tables: proj,
+          prps_r,
+          act01,
+          psmlst.
+
+  data: pspid         like prps-posid.
+
+  data: itab_proj      like proj   occurs 0 with header line,
+        itab_prps      like prps   occurs 0 with header line,
+        itab_prte      like prte   occurs 0 with header line,
+        itab_prhi      like prhi   occurs 0 with header line,
+        itab_act01     like act01  occurs 0 with header line,
+        itab_wbsml     like psmlst occurs 0 with header line,
+        itab_hierarchy like bapi_wbs_hierarchie
+                                   occurs 0 with header line,
+        itab_activity  like bapi_network_activity_exp
+                                   occurs 0 with header line,
+        afvgd          like  afvgd.
+
+  data: begin of itab_ext_int occurs 0,
+          posid like prps-posid,
+          pspnr like prps-pspnr,
+        end of itab_ext_int.
+
+  data: cn_tcndb  like tcndb,
+        cn_tcnds  like tcnds,
+
+* Löschvormerkung
+     const_st_loevm like jest-stat value 'I0076',
+*  gelöscht
+     const_st_loe   like jest-stat value 'I0013'.
+
+  data: loc_project_definition like bapipr-project_definition,
+        loc_with_subtree like bapipr-with_subtree.
+
+  data: dialog_status_tmp.
+
+  ranges: cn_projn for proj-pspid,
+          cn_pspnr for prps_r-posid.
+
+* Init exporting tables
+  clear:
+    e_wbs_element_table,
+    e_wbs_milestone_table,
+    e_wbs_hierarchie_table,
+    e_activity_table,
+    e_message_table.
+  refresh:
+    e_wbs_element_table,
+    e_wbs_milestone_table,
+    e_wbs_hierarchie_table,
+    e_activity_table,
+    e_message_table.
+
+* we are not using any dialogs (set parameter FLAG_DIALOG_STATUS)
+  call function 'DIALOG_GET_STATUS'
+    importing
+      dialog_status = dialog_status_tmp.
+  call function 'DIALOG_SET_NO_DIALOG'.
+
+  perform set_no_dialog_flag in program saplco2o using 'X'.
+
+*Check the subtree option in field 'PROJECT_DEFINITION'
+  if project_definition = '!SUBTREE' or
+     project_definition = '!subtree'.
+    loc_with_subtree = 'X'.
+  else.
+    loc_project_definition = project_definition.
+    loc_with_subtree = ' '.
+  endif.
+
+* Bei Selektion des Teilbaums genau ein PSP-Element
+  if not with_subtree is initial or
+     not loc_with_subtree is initial.
+    describe table i_wbs_element_table lines sy-tabix.
+    if sy-tabix <> 1.
+      call function 'BALW_BAPIRETURN_GET1'
+        exporting
+          type       = 'E'
+          cl         = 'CJ'
+          number     = '076'
+        importing
+          bapireturn = return
+        exceptions
+          others     = 1.
+*     Kz. BAPI-Nachrichtenverarbeitung zurücksetzen
+      perform set_no_dialog_flag in program saplco2o using space.
+
+*     Set parameter FLAG_DIALOG_STATUS to old value
+      if dialog_status_tmp is initial.
+        call function 'DIALOG_SET_WITH_DIALOG'.
+      else.
+        call function 'DIALOG_SET_NO_DIALOG'.
+      endif.
+      exit.
+    endif.
+  endif.
+
+* Kein Projekt oder PSP-Elemente angegeben -> Fehler
+  if loc_project_definition is initial and
+     i_wbs_element_table[] is initial.
+    call function 'BALW_BAPIRETURN_GET1'
+      exporting
+        type       = 'E'
+        cl         = 'CJ'
+        number     = '029'
+      importing
+        bapireturn = return
+      exceptions
+        others     = 1.
+*   Kz. BAPI-Nachrichtenverarbeitung zurücksetzen
+    perform set_no_dialog_flag in program saplco2o using space.
+
+*   Set parameter FLAG_DIALOG_STATUS to old value
+    if dialog_status_tmp is initial.
+      call function 'DIALOG_SET_WITH_DIALOG'.
+    else.
+      call function 'DIALOG_SET_NO_DIALOG'.
+    endif.
+    exit.
+  endif.
+
+* Projekt und PSP-Elemente angegeben -> Fehler
+  if not loc_project_definition is initial and
+     not i_wbs_element_table[] is initial.
+    call function 'BALW_BAPIRETURN_GET1'
+      exporting
+        type       = 'E'
+        cl         = 'CJ'
+        number     = '029'
+      importing
+        bapireturn = return
+      exceptions
+        others     = 1.
+*   Kz. BAPI-Nachrichtenverarbeitung zurücksetzen
+    perform set_no_dialog_flag in program saplco2o using space.
+
+*   Set parameter FLAG_DIALOG_STATUS to old value
+    if dialog_status_tmp is initial.
+      call function 'DIALOG_SET_WITH_DIALOG'.
+    else.
+      call function 'DIALOG_SET_NO_DIALOG'.
+    endif.
+    exit.
+  endif.
+
+* ^_nt_1292961
+  DATA: msghand_num   LIKE  sy-uzeit,
+        msg_log       LIKE msg_log OCCURS 0 WITH HEADER LINE,
+        method_log    LIKE method_log OCCURS 0 WITH HEADER LINE,
+        exp_msg_text  LIKE msg_text OCCURS 0 WITH HEADER LINE,
+        log_level     LIKE method_log-loglevel,
+        SUCC_CODE     LIKE METHOD_LOG-SUCC_CODE,
+        initialize    LIKE method_log-method VALUE 'initialize'.
+
+  CALL FUNCTION 'METHOD_START_LOG'
+    EXPORTING
+      method      = initialize
+    IMPORTING
+      msghand_num = msghand_num
+      log_level   = log_level
+    EXCEPTIONS
+      OTHERS      = 1.
+
+  CALL FUNCTION 'METHOD_LOG_INIT'
+    EXPORTING
+      msghand_num     = msghand_num
+    IMPORTING
+      msghand_num_exp = msghand_num
+    EXCEPTIONS
+      not_authorized  = 1
+      OTHERS          = 2.
+* v_nt_1292961
+
+* DB-Profil setzen
+* Projekt
+  cn_tcndb-proj  = 'X'.
+* PSP und darunter
+  cn_tcndb-prps  = 'X'.
+* Netzplan (nur wenn Vorgänge gewünscht)
+  if not with_activities is initial.
+    cn_tcndb-incnt    =
+    cn_tcndb-netz_psp =
+*   Netzplanvorgänge
+    cn_tcndb-act_psp  = 'X'.
+  endif.
+  if not with_milestones is initial.
+* Meilensteine zu PSP-Elementen
+    cn_tcndb-mlst     = 'X'.
+  endif.
+  if not with_subtree is initial or
+     not loc_with_subtree is initial.
+* Teilbaum zu PSP-Element
+    cn_tcndb-hiekz    = 'X'.
+  endif.
+  cn_tcndb-incvg    = 'X'.
+  cn_tcndb-maxlevel  = 99.
+  cn_tcndb-aobkz     = '3'.
+* ENDIF.
+* DB-Sicht: Struktursicht
+  cn_tcnds-ps_hierart = '1'.
+
+* Ranges für Selektionsoptionen füllen
+  if not loc_project_definition is initial.
+* Mit Projektdefinition einsteigen
+
+* Konvertierungsexit Projektdefinition
+    call function 'CONVERSION_EXIT_PROJN_INPUT'
+      exporting
+        input         = loc_project_definition
+      importing
+        output        = pspid
+      exceptions
+        error_message = 1
+        others        = 2.
+    if sy-subrc <> 0.
+      perform put_sy_message in program saplco2o.
+    endif.
+    cn_projn-sign    = 'I'.
+    cn_projn-option  = 'EQ'.
+    cn_projn-low     = pspid.
+    append cn_projn.
+  else.
+*   Mit PSP-Element einsteigen
+    loop at i_wbs_element_table.
+* Konvertierungsexit
+      call function 'CONVERSION_EXIT_PROJN_INPUT'
+        exporting
+          input         = i_wbs_element_table-wbs_element
+        importing
+          output        = pspid
+        exceptions
+          error_message = 1
+          others        = 2.
+      if sy-subrc <> 0.
+        perform put_sy_message in program saplco2o.
+      endif.
+      cn_pspnr-sign    = 'I'.
+      cn_pspnr-option  = 'EQ'.
+      cn_pspnr-low     = pspid.
+      append cn_pspnr.
+      if not with_subtree is initial or
+         not loc_with_subtree is initial.
+* Bei Teilbaum nur erstes PSP-Element als Einstiegselement
+        exit.
+      endif.
+    endloop.
+  endif.
+  cn_aktdt = con_yes.
+
+  export cn_tcndb cn_tcnds to memory id 'SAPDBPSJ_CN_TCNDB'.
+* Objekte mit LDB PSJ selektieren
+  submit bapi_project_getinfo_select with cn_projn in cn_projn
+                                     with cn_pspnr in cn_pspnr
+                                     and return.
+
+* Alle selektierten Objekte aus dem Memory importieren
+  import itab_proj
+         itab_prps
+         itab_prte
+         itab_act01
+         itab_wbsml
+         from memory id 'SAPDBPSJ     PSJ_RESULTS'.
+
+* read edited project/WBS numbers into buffer ...
+  if pdefnumber[] is initial and
+     not itab_proj[] is initial.
+    call function 'CNIF_READ_PROJECTNUMBER_MULTI'
+      tables
+        i_proj = itab_proj.
+  endif.
+  if wbsnumber[] is initial and
+     not itab_prps[] is initial.
+    call function 'CNIF_READ_PROJECTNUMBER_MULTI'
+      tables
+        i_prps = itab_prps.
+  endif.
+
+* Projekt nicht gefunden -> Fehler
+  if not loc_project_definition is initial.
+    if itab_proj[] is initial.
+      sy-msgv1 = loc_project_definition.
+      call function 'BALW_BAPIRETURN_GET1'
+        exporting
+          type       = 'E'
+          cl         = 'CJ'
+          number     = '011'
+          par1       = sy-msgv1
+        importing
+          bapireturn = return
+        exceptions
+          others     = 1.
+*     Kz. BAPI-Nachrichtenverarbeitung zurücksetzen
+      perform set_no_dialog_flag in program saplco2o using space.
+
+*     Set parameter FLAG_DIALOG_STATUS to old value
+      if dialog_status_tmp is initial.
+        call function 'DIALOG_SET_WITH_DIALOG'.
+      else.
+        call function 'DIALOG_SET_NO_DIALOG'.
+      endif.
+      exit.
+    else.
+      read table itab_proj index 1.
+*     Authority check
+      call function 'CNAU_AUTHORITY_PROJ'
+        exporting
+          actvt         = '03'
+          actvt_a       = '03'
+          i_proj        = itab_proj
+          msgty         = 'E'
+        exceptions
+          error_message = 1.
+      if sy-subrc <> 0.
+        call function 'BALW_BAPIRETURN_GET1'
+          exporting
+            type       = sy-msgty
+            cl         = sy-msgid
+            number     = sy-msgno
+            par1       = sy-msgv1
+            par2       = sy-msgv2
+            par3       = sy-msgv3
+            par4       = sy-msgv4
+          importing
+            bapireturn = return
+          exceptions
+            others     = 0.
+
+*       Reset FLAG_NO_DIALOG                          "v_n_871021
+        perform set_no_dialog_flag in program saplco2o using space.
+
+*       Set parameter FLAG_DIALOG_STATUS to old value
+        if dialog_status_tmp is initial.
+          call function 'DIALOG_SET_WITH_DIALOG'.
+        else.
+          call function 'DIALOG_SET_NO_DIALOG'.
+        endif.                                        "^_n_871021
+
+        exit.
+      endif.
+
+      call function 'MAP_PROJ_2_BAPI_PROJECTDEF_EX'
+        exporting
+          i_proj                  = itab_proj
+        changing
+          bapi_project_definition = e_project_definition
+        exceptions
+          others                  = 1.
+      call function 'STATUS_CHECK'
+        exporting
+          objnr             = itab_proj-objnr
+          status            = const_st_loevm
+        exceptions
+          object_not_found  = 1
+          status_not_active = 2
+          others            = 3.
+      if sy-subrc is initial.
+        e_project_definition-deletion_flag = 'X'.
+      endif.
+
+    endif.
+  else.
+    if itab_prps[] is initial.
+* Es wurde kein PSP-Element selektiert -> Fehler
+      call function 'BALW_BAPIRETURN_GET1'
+        exporting
+          type       = 'E'
+          cl         = 'CJ'
+          number     = '033'
+        importing
+          bapireturn = return
+        exceptions
+          others     = 1.
+*     Kz. BAPI-Nachrichtenverarbeitung zurücksetzen
+      perform set_no_dialog_flag in program saplco2o using space.
+
+*     Set parameter FLAG_DIALOG_STATUS to old value
+      if dialog_status_tmp is initial.
+        call function 'DIALOG_SET_WITH_DIALOG'.
+      else.
+        call function 'DIALOG_SET_NO_DIALOG'.
+      endif.
+      exit.
+    endif.
+  endif.
+
+* PSP-Elemente in BAPI-Struktur mappen
+  loop at itab_prps.
+* ^_nt_1292961
+    CALL FUNCTION 'METHOD_START_LOG'
+         EXPORTING
+              METHOD     = CO1_METH-READ
+              OBJ_TYP    = CO1_TYPE-WBS_ELEMENT
+              OBJ_ID_EXT = itab_prps-POSID
+         IMPORTING
+              LOG_LEVEL  = LOG_LEVEL.
+* v_nt_1292961
+    clear e_wbs_element_table.
+*   Authority check
+    call function 'CNAU_AUTHORITY_PRPS'
+      exporting
+        actvt         = '03'
+        actvt_a       = '03'
+        i_prps        = itab_prps
+        msgty         = 'E'
+      exceptions
+        error_message = 1.
+    if sy-subrc <> 0.
+* ^_nt_1292961
+*      call function 'BALW_BAPIRETURN_GET1'
+*        exporting
+*          type       = sy-msgty
+*          cl         = sy-msgid
+*          number     = sy-msgno
+*          par1       = sy-msgv1
+*          par2       = sy-msgv2
+*          par3       = sy-msgv3
+*          par4       = sy-msgv4
+*        importing
+*          bapireturn = return
+*        exceptions
+*          others     = 0.
+**       Reset FLAG_NO_DIALOG                          "v_n_871021
+*        perform set_no_dialog_flag in program saplco2o using space.
+*
+**       Set parameter FLAG_DIALOG_STATUS to old value
+*        if dialog_status_tmp is initial.
+*          call function 'DIALOG_SET_WITH_DIALOG'.
+*        else.
+*          call function 'DIALOG_SET_NO_DIALOG'.
+*        endif.                                        "^_n_871021
+*
+*
+*      exit.
+      PERFORM put_sy_message IN PROGRAM saplco2o.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+           EXPORTING
+                log_level       = log_level
+                succ_code       = succ_code
+           EXCEPTIONS
+                OTHERS          = 0.
+      continue.
+* v_nt_1292961
+    endif.
+
+    call function 'MAP_PRPS_2_BAPI_WBS_ELEMENT_EX'
+      exporting
+        i_prps           = itab_prps
+      changing
+        bapi_wbs_element = e_wbs_element_table
+      exceptions
+        others           = 1.
+
+    call function 'STATUS_CHECK'
+      exporting
+        objnr             = itab_prps-objnr
+        status            = const_st_loevm
+      exceptions
+        object_not_found  = 1
+        status_not_active = 2
+        others            = 3.
+
+    if sy-subrc is initial.
+      e_wbs_element_table-deletion_flag = 'X'.
+    endif.
+
+    read table itab_prte with key posnr = itab_prps-pspnr.
+    if sy-subrc = 0.
+      call function 'MAP_PRTE_2_BAPI_WBS_ELEMENT_EX'
+        exporting
+          prte                 = itab_prte
+        changing
+          bapi_wbs_element_exp = e_wbs_element_table.
+    endif.
+
+    append e_wbs_element_table.
+* Milestones for wbs elements
+    loop at itab_wbsml where pspnr = itab_prps-pspnr.
+      call function 'MAP_PSMLST_2_BAPI_WBS_MILESTON'
+        exporting
+          psmlst                 = itab_wbsml
+        changing
+          bapi_wbs_milestone_exp = e_wbs_milestone_table
+        exceptions
+          error_converting_keys  = 1
+          others                 = 2.
+      if sy-subrc is initial.
+        if not e_wbs_element_table-deletion_flag is initial.
+          e_wbs_milestone_table-deletion_flag =
+                      e_wbs_element_table-deletion_flag.
+        endif.
+        append e_wbs_milestone_table.
+      endif.
+    endloop.
+* ^_nt_1292961
+    CALL FUNCTION 'METHOD_FINISH_LOG'
+         EXPORTING
+              log_level       = log_level
+              succ_code       = succ_code
+         EXCEPTIONS
+              OTHERS          = 0.
+* v_nt_1292961
+  endloop.
+
+* Bei Einstieg mit Projektdefinition: Hierarchie nachselektiern
+  if not itab_proj[] is initial.
+    read table itab_proj index 1.
+    select * from prhi into table itab_prhi
+                       where psphi = itab_proj-pspnr.
+  endif.
+
+* select the subhierarchy of a given wbs element
+  if not with_subtree is initial or
+     not loc_with_subtree is initial.
+    select * from prhi into table itab_prhi
+                       for all entries in itab_prps
+                       where posnr = itab_prps-pspnr.
+  endif.
+
+  if not itab_prhi[] is initial.
+    data proj_def like proj-pspid.
+* Hierarchie in externe Darstellung bringen
+    loop at itab_prps.
+      move itab_prps-pspnr to itab_ext_int-pspnr.
+      move itab_prps-posid to itab_ext_int-posid.
+      collect itab_ext_int.
+    endloop.
+* there's only one project definition
+    write itab_prps-psphi to proj_def.
+
+* Sort a table for READ TABLE ... BINARY DEARCH.
+    sort itab_ext_int by pspnr.
+
+    loop at itab_prhi.
+
+      clear itab_hierarchy.
+
+      itab_hierarchy-project_definition = proj_def.
+
+      read table itab_ext_int with key pspnr = itab_prhi-posnr
+                                                        binary search.
+      if sy-subrc is initial.
+        call function 'CONVERSION_EXIT_PROJN_OUTPUT'
+          exporting
+            input         = itab_ext_int-posid
+          importing
+            output        = itab_hierarchy-wbs_element
+          exceptions
+            error_message = 1
+            others        = 2.
+      endif.
+      read table itab_ext_int with key pspnr = itab_prhi-up
+                                                        binary search.
+      if sy-subrc is initial.
+        call function 'CONVERSION_EXIT_PROJN_OUTPUT'
+          exporting
+            input         = itab_ext_int-posid
+          importing
+            output        = itab_hierarchy-up
+          exceptions
+            error_message = 1
+            others        = 2.
+      endif.
+      read table itab_ext_int with key pspnr = itab_prhi-down
+                                                        binary search.
+      if sy-subrc is initial.
+        call function 'CONVERSION_EXIT_PROJN_OUTPUT'
+          exporting
+            input         = itab_ext_int-posid
+          importing
+            output        = itab_hierarchy-down
+          exceptions
+            error_message = 1
+            others        = 2.
+      endif.
+      read table itab_ext_int with key pspnr = itab_prhi-left
+                                                        binary search.
+      if sy-subrc is initial.
+        call function 'CONVERSION_EXIT_PROJN_OUTPUT'
+          exporting
+            input         = itab_ext_int-posid
+          importing
+            output        = itab_hierarchy-left
+          exceptions
+            error_message = 1
+            others        = 2.
+      endif.
+      read table itab_ext_int with key pspnr = itab_prhi-right
+                                                        binary search.
+      if sy-subrc is initial.
+        call function 'CONVERSION_EXIT_PROJN_OUTPUT'
+          exporting
+            input         = itab_ext_int-posid
+          importing
+            output        = itab_hierarchy-right
+          exceptions
+            error_message = 1
+            others        = 2.
+      endif.
+      append itab_hierarchy.
+    endloop.
+    e_wbs_hierarchie_table[] = itab_hierarchy[].
+  endif.
+
+* Vorgänge in BAPI-Struktur mappen
+  loop at itab_act01 where sumnr is initial.
+    move-corresponding itab_act01 to afvgd.
+    call function 'MAP2E_AFVGD_TO_BAPI_ACTIVITY'
+      exporting
+        afvgd                 = afvgd
+      changing
+        bapi_network_activity = itab_activity
+      exceptions
+        others                = 0.
+    call function 'STATUS_CHECK'
+      exporting
+        objnr             = afvgd-objnr
+        status            = const_st_loe
+      exceptions
+        object_not_found  = 1
+        status_not_active = 2
+        others            = 3.
+    if sy-subrc is initial.
+      itab_activity-deletion_flag = 'X'.
+    endif.
+
+    append itab_activity.
+  endloop.
+
+  e_activity_table[] = itab_activity[].
+
+* ^_nt_1292961
+  CALL FUNCTION 'METHOD_LOG_READ'
+    TABLES
+      t_method_log_exp = method_log
+      t_msg_log_exp    = msg_log
+    EXCEPTIONS
+      OTHERS           = 1.
+
+  CALL FUNCTION 'MESSAGE_TEXTS_READ'
+    TABLES
+      t_msg_log_imp   = msg_log
+      t_msg_texts_exp = e_msg_text
+    EXCEPTIONS
+      OTHERS          = 1.
+
+  PERFORM create_msg_table(saplcnif) TABLES method_log
+                                            msg_log
+                                            e_msg_text
+                                            e_message_table.
+* v_nt_1292961
+
+* Kz. BAPI-Nachrichtenverarbeitung zurücksetzen
+  perform set_no_dialog_flag in program saplco2o using space.
+
+* Set parameter FLAG_DIALOG_STATUS to old value
+  if dialog_status_tmp is initial.
+    call function 'DIALOG_SET_WITH_DIALOG'.
+  else.
+    call function 'DIALOG_SET_NO_DIALOG'.
+  endif.
+
+endfunction.

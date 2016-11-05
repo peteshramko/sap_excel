@@ -1,0 +1,60 @@
+FUNCTION BAPI_COPAPLANNING_POSTDATA.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(OPERATINGCONCERN) LIKE  BAPI1167-OPERATINGCONCERN
+*"     VALUE(TYPEOFPROFITANALYSIS) LIKE  BAPI1167-TYPEOFPA
+*"     VALUE(TESTRUN) LIKE  BAPI1167-TESTRUN
+*"  TABLES
+*"      SELECTEDFIELDS STRUCTURE  BAPI_COPA_FIELD
+*"      SELECTION STRUCTURE  BAPI_COPA_SELECTION
+*"      DATA STRUCTURE  BAPI_COPA_DATA
+*"      RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+
+  DATA:  L_REPNAM LIKE RS38M-PROGRAMM VALUE 'RK2P%ERK_BAPI'.
+
+  DATA: LR_ANALYSIS_ATTRIBUTES TYPE REF TO CL_COPA_ANALYSIS_ATTRIBUTES.
+
+  DATA: LS_BAPI_RETURN TYPE BAPIRET2.
+
+
+* Prüfen, ob Ergebnisbereich aktiv ist.
+  CALL METHOD CL_COPA_ANALYSIS_ATTRIBUTES=>GET_INSTANCE
+              EXPORTING
+                   IM_ERKRS    = OPERATINGCONCERN
+                   IM_PA_TYPE  = TYPEOFPROFITANALYSIS
+              IMPORTING
+                   EX_INSTANCE = LR_ANALYSIS_ATTRIBUTES
+              EXCEPTIONS
+                   NOT_ACTIVE = 8.
+
+  IF SY-SUBRC NE 0.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET2'
+         EXPORTING
+              TYPE   = SY-MSGTY
+              CL     = SY-MSGID
+              NUMBER = SY-MSGNO
+              PAR1   = SY-MSGV1
+              PAR2   = SY-MSGV2
+              PAR3   = SY-MSGV3
+              PAR4   = SY-MSGV4
+         IMPORTING
+              RETURN = LS_BAPI_RETURN.
+
+    APPEND LS_BAPI_RETURN TO RETURN.
+    EXIT.
+  ENDIF.
+
+  REPLACE '%ERK' WITH OPERATINGCONCERN INTO L_REPNAM.
+
+  PERFORM COPAPLANNING_POSTDATA IN PROGRAM (L_REPNAM)
+              USING    OPERATINGCONCERN
+                       TYPEOFPROFITANALYSIS
+                       TESTRUN
+                       SELECTEDFIELDS[]
+                       SELECTION[]
+                       DATA[]
+              CHANGING RETURN[].
+
+ENDFUNCTION.

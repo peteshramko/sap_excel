@@ -1,0 +1,61 @@
+FUNCTION K_PCAP_SET_AUTHORITY_CHECK.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(ACTVT) LIKE  TACT-ACTVT DEFAULT SPACE
+*"             VALUE(KOKRS) LIKE  CCSS-KOKRS DEFAULT SPACE
+*"             VALUE(GROUP) LIKE  SETHIER-SHORTNAME DEFAULT SPACE
+*"       EXCEPTIONS
+*"              SYSTEM_ERROR
+*"              USER_NOT_AUTHORIZED
+*"----------------------------------------------------------------------
+* Dieser Baustein wird von der Gruppenpflege (GRZZ) aus dynamisch
+* aufgerufen.
+*-----------------------------------------------------------------------
+* Verarbeitungsablauf:
+*-----------------------------------------------------------------------
+*
+* suchen gepufferten Eintrag
+* diesen gepufferten Eintrag gefunden ?
+* ... nein, expliziter AUTHORITY-CHECK mit übergebenen Werten
+*
+* RC-Prüfen
+*
+*-----------------------------------------------------------------------
+  DATA: NEW_RC LIKE SY-SUBRC,
+        OLD_RC LIKE SY-SUBRC,
+        CO_ACTION LIKE COACT-CO_ACTION.
+
+  PERFORM K_PCAP_SET_READ_TAB USING ACTVT
+                                    KOKRS.
+  IF  K_PCAP_SET_TAB-EXCEP = 99.
+    PERFORM K_PCAP_SET_AUTHORITY_CHECK USING ACTVT
+                                             KOKRS.
+  ENDIF.
+
+  PERFORM K_PCAP_SET_RC_PRUEFEN USING ACTVT
+                                      KOKRS
+                                      K_PCAP_SET_TAB-EXCEP.
+
+* neue Berechtigungspruefung 4.0
+  OLD_RC = K_PCAP_SET_TAB-EXCEP.
+  IF OLD_RC = 0.
+    CALL FUNCTION 'K_PCA_RESP_AUTHORITY_CHECK'
+         EXPORTING
+              I_KOKRS             = KOKRS
+              I_PCGRP             = GROUP
+              I_VORGN             = 'STDT'  "master data
+              I_ACTVT             = ACTVT
+              I_NO_DIALOG_MESSAGE = 'X'
+         EXCEPTIONS
+              NO_AUTHORITY        = 1
+              DATA_MISSING        = 2
+              OTHERS              = 3.
+    NEW_RC = SY-SUBRC.
+  ENDIF.
+
+  IF NEW_RC > 0 OR OLD_RC > 0.
+    RAISE USER_NOT_AUTHORIZED.
+  ENDIF.
+
+ENDFUNCTION.

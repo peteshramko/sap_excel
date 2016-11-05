@@ -1,0 +1,680 @@
+FUNCTION bapi_po_create1.                                   "#EC ENHOK
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(POHEADER) LIKE  BAPIMEPOHEADER STRUCTURE  BAPIMEPOHEADER
+*"     VALUE(POHEADERX) LIKE  BAPIMEPOHEADERX STRUCTURE
+*"        BAPIMEPOHEADERX OPTIONAL
+*"     VALUE(POADDRVENDOR) LIKE  BAPIMEPOADDRVENDOR STRUCTURE
+*"        BAPIMEPOADDRVENDOR OPTIONAL
+*"     VALUE(TESTRUN) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(MEMORY_UNCOMPLETE) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(MEMORY_COMPLETE) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(POEXPIMPHEADER) LIKE  BAPIEIKP STRUCTURE  BAPIEIKP
+*"       OPTIONAL
+*"     VALUE(POEXPIMPHEADERX) LIKE  BAPIEIKPX STRUCTURE  BAPIEIKPX
+*"       OPTIONAL
+*"     VALUE(VERSIONS) LIKE  BAPIMEDCM STRUCTURE  BAPIMEDCM OPTIONAL
+*"     VALUE(NO_MESSAGING) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(NO_MESSAGE_REQ) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(NO_AUTHORITY) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(NO_PRICE_FROM_PO) LIKE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(PARK_COMPLETE) TYPE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"     VALUE(PARK_UNCOMPLETE) TYPE  BAPIFLAG-BAPIFLAG OPTIONAL
+*"  EXPORTING
+*"     VALUE(EXPPURCHASEORDER) LIKE  BAPIMEPOHEADER-PO_NUMBER
+*"     VALUE(EXPHEADER) LIKE  BAPIMEPOHEADER STRUCTURE  BAPIMEPOHEADER
+*"     VALUE(EXPPOEXPIMPHEADER) LIKE  BAPIEIKP STRUCTURE  BAPIEIKP
+*"  TABLES
+*"      RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      POITEM STRUCTURE  BAPIMEPOITEM OPTIONAL
+*"      POITEMX STRUCTURE  BAPIMEPOITEMX OPTIONAL
+*"      POADDRDELIVERY STRUCTURE  BAPIMEPOADDRDELIVERY OPTIONAL
+*"      POSCHEDULE STRUCTURE  BAPIMEPOSCHEDULE OPTIONAL
+*"      POSCHEDULEX STRUCTURE  BAPIMEPOSCHEDULX OPTIONAL
+*"      POACCOUNT STRUCTURE  BAPIMEPOACCOUNT OPTIONAL
+*"      POACCOUNTPROFITSEGMENT STRUCTURE  BAPIMEPOACCOUNTPROFITSEGMENT
+*"       OPTIONAL
+*"      POACCOUNTX STRUCTURE  BAPIMEPOACCOUNTX OPTIONAL
+*"      POCONDHEADER STRUCTURE  BAPIMEPOCONDHEADER OPTIONAL
+*"      POCONDHEADERX STRUCTURE  BAPIMEPOCONDHEADERX OPTIONAL
+*"      POCOND STRUCTURE  BAPIMEPOCOND OPTIONAL
+*"      POCONDX STRUCTURE  BAPIMEPOCONDX OPTIONAL
+*"      POLIMITS STRUCTURE  BAPIESUHC OPTIONAL
+*"      POCONTRACTLIMITS STRUCTURE  BAPIESUCC OPTIONAL
+*"      POSERVICES STRUCTURE  BAPIESLLC OPTIONAL
+*"      POSRVACCESSVALUES STRUCTURE  BAPIESKLC OPTIONAL
+*"      POSERVICESTEXT STRUCTURE  BAPIESLLTX OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      EXTENSIONOUT STRUCTURE  BAPIPAREX OPTIONAL
+*"      POEXPIMPITEM STRUCTURE  BAPIEIPO OPTIONAL
+*"      POEXPIMPITEMX STRUCTURE  BAPIEIPOX OPTIONAL
+*"      POTEXTHEADER STRUCTURE  BAPIMEPOTEXTHEADER OPTIONAL
+*"      POTEXTITEM STRUCTURE  BAPIMEPOTEXT OPTIONAL
+*"      ALLVERSIONS STRUCTURE  BAPIMEDCM_ALLVERSIONS OPTIONAL
+*"      POPARTNER STRUCTURE  BAPIEKKOP OPTIONAL
+*"      POCOMPONENTS STRUCTURE  BAPIMEPOCOMPONENT OPTIONAL
+*"      POCOMPONENTSX STRUCTURE  BAPIMEPOCOMPONENTX OPTIONAL
+*"      POSHIPPING STRUCTURE  BAPIITEMSHIP OPTIONAL
+*"      POSHIPPINGX STRUCTURE  BAPIITEMSHIPX OPTIONAL
+*"      POSHIPPINGEXP STRUCTURE  BAPIMEPOSHIPPEXP OPTIONAL
+*"      SERIALNUMBER STRUCTURE  BAPIMEPOSERIALNO OPTIONAL
+*"      SERIALNUMBERX STRUCTURE  BAPIMEPOSERIALNOX OPTIONAL
+*"      INVPLANHEADER STRUCTURE  BAPI_INVOICE_PLAN_HEADER OPTIONAL
+*"      INVPLANHEADERX STRUCTURE  BAPI_INVOICE_PLAN_HEADERX OPTIONAL
+*"      INVPLANITEM STRUCTURE  BAPI_INVOICE_PLAN_ITEM OPTIONAL
+*"      INVPLANITEMX STRUCTURE  BAPI_INVOICE_PLAN_ITEMX OPTIONAL
+*"----------------------------------------------------------------------
+enhancement-point bapi_po_create1_g8 spots es_sapl2012 static.
+*$*$-Start: BAPI_PO_CREATE1_G8------------------------------------------------------------------$*$*
+ENHANCEMENT 3  MGV_GENERATED_BAPI_PO_CREATE1.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+DATA: T_MGV_FNAMES3 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+
+FIELD-SYMBOLS: <MGV_POCOMPONENTSX> TYPE BAPIMEPOCOMPONENTX.
+FIELD-SYMBOLS: <MGV_POITEMX> TYPE BAPIMEPOITEMX.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE1_G8------------------------------------------------------------------$*$*
+
+enhancement-point bapi_po_create1_g6 spots es_sapl2012.
+*$*$-Start: BAPI_PO_CREATE1_G6------------------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_PO_CREATE1.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050216
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = POCOMPONENTS
+  .
+LOOP AT POCOMPONENTSX ASSIGNING <MGV_POCOMPONENTSX>
+  WHERE NOT ( MATERIAL_EXTERNAL IS INITIAL AND
+              MATERIAL_VERSION IS INITIAL AND
+              MATERIAL_GUID IS INITIAL ).
+  <MGV_POCOMPONENTSX>-MATERIAL = 'X'.
+ENDLOOP.
+T_MGV_FNAMES3-INT = 'MATERIAL'.
+T_MGV_FNAMES3-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES3-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES3-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES3.
+T_MGV_FNAMES3-INT = 'EMATERIAL'.
+T_MGV_FNAMES3-EXT = 'EMATERIAL_EXTERNAL'.
+T_MGV_FNAMES3-VERS = 'EMATERIAL_VERSION'.
+T_MGV_FNAMES3-GUID = 'EMATERIAL_GUID'.
+APPEND T_MGV_FNAMES3.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES3
+  T_MATNR  = POITEM
+  .
+LOOP AT POITEMX ASSIGNING <MGV_POITEMX>
+  WHERE NOT ( MATERIAL_EXTERNAL IS INITIAL AND
+              MATERIAL_VERSION IS INITIAL AND
+              MATERIAL_GUID IS INITIAL ).
+  <MGV_POITEMX>-MATERIAL = 'X'.
+ENDLOOP.
+LOOP AT POITEMX ASSIGNING <MGV_POITEMX>
+  WHERE NOT ( EMATERIAL_EXTERNAL IS INITIAL AND
+              EMATERIAL_VERSION IS INITIAL AND
+              EMATERIAL_GUID IS INITIAL ).
+  <MGV_POITEMX>-EMATERIAL = 'X'.
+ENDLOOP.
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE1_G6------------------------------------------------------------------$*$*
+
+* docu:
+* docu: ==================================================
+* docu: BAPI_PO_CREATE1 : Create purchase order via BAPI
+* docu: ==================================================
+* docu:
+
+* generate data record
+  SET EXTENDED CHECK OFF.
+  fbgenmac 'BAPI_PO_CREATE1'.
+  SET EXTENDED CHECK ON.
+
+* local data
+  DATA:
+  lf_header_currency  LIKE tcurc-waers,
+* local references
+  l_messages          TYPE mepo_t_messages_bapi,
+  l_po                TYPE REF TO cl_po_header_handle_mm,
+  lo_const            TYPE REF TO cl_mmpur_constants,
+  my_handler          TYPE REF TO cl_message_handler_mm,
+  lt_models           TYPE mmpur_models,
+* local structure
+  ls_header           LIKE mepoheader,
+  ls_headerx          LIKE mepoheaderx,
+  ls_expimp_header    LIKE mepo_eikp,
+  ls_expimp_headerx   LIKE mepo_eikpx,
+  ls_headeraddrzav    TYPE mepoheaderaddrzav,
+  ls_dcm_erevitem     TYPE erevitem_bapi,
+* local fields/variables
+  l_flg               TYPE c LENGTH 1,
+* local tables
+  lt_item             LIKE mepoitem        OCCURS 0 WITH HEADER LINE,
+  lt_itemx            LIKE mepoitemx       OCCURS 0 WITH HEADER LINE,
+  lt_itemaddrzav      TYPE tab_mepoitemaddrzav,
+  lt_schedule         LIKE meposchedule    OCCURS 0 WITH HEADER LINE,
+  lt_schedulex        LIKE meposchedulex   OCCURS 0 WITH HEADER LINE,
+  lt_account          LIKE mepoaccounting  OCCURS 0 WITH HEADER LINE,
+  lt_accountx         LIKE mepoaccountingx OCCURS 0 WITH HEADER LINE,
+  pohistory           TYPE STANDARD TABLE OF bapiekbe,
+  pohistory_ma        TYPE STANDARD TABLE OF bapiekbe_ma,
+  pohistory_totals    TYPE STANDARD TABLE OF bapiekbes,
+  poconfirmation      TYPE STANDARD TABLE OF bapiekes,
+  lt_condheader_bapi  TYPE tab_komv_bapi,
+  lt_condheaderx_bapi LIKE mepoconditionx  OCCURS 0 WITH HEADER LINE,
+  lt_cond_bapi        TYPE tab_komv_bapi,
+  lt_condx_bapi       LIKE mepoconditionx  OCCURS 0 WITH HEADER LINE,
+  lt_cond             LIKE komv            OCCURS 0 WITH HEADER LINE, "#EC NEEDED
+  lt_condx            LIKE mepoconditionx  OCCURS 0 WITH HEADER LINE, "#EC NEEDED
+  lt_esuh             LIKE esuh            OCCURS 0 WITH HEADER LINE,
+  lt_esuc             LIKE esuc            OCCURS 0 WITH HEADER LINE,
+  lt_esll             LIKE esll            OCCURS 0 WITH HEADER LINE,
+  lt_eskl             LIKE eskl            OCCURS 0 WITH HEADER LINE,
+  lt_srv_text         LIKE srv_text        OCCURS 0 WITH HEADER LINE,
+  lt_comsrv           TYPE STANDARD TABLE OF comsrv,
+  lt_acc_tab          TYPE mmpur_acc_tab,
+  lt_expimp_item      LIKE mepo_eipo       OCCURS 0 WITH HEADER LINE,
+  lt_expimp_itemx     LIKE mepo_eipox      OCCURS 0 WITH HEADER LINE,
+  lt_text_header      LIKE bapiekpotx      OCCURS 0 WITH HEADER LINE,
+  lt_text_items       LIKE bapiekpotx      OCCURS 0 WITH HEADER LINE,
+  lt_partner          LIKE bapimepopartner OCCURS 0 WITH HEADER LINE,
+  lt_comp             TYPE mepo_t_component,
+  lt_compx            TYPE mepo_t_componentx,
+  lt_ekpv             TYPE mmpr_ekpv,
+  lt_ekpvx            TYPE mmpr_ekpvx.
+
+
+
+* docu:
+  lo_const = cl_mmpur_constants=>get_instance( ).
+* docu: init
+  PERFORM init
+            TABLES    return          CHANGING  l_messages.
+
+
+enhancement-section     bapi_po_create1_03 spots es_sapl2012.
+* docu:
+* docu: initialize (handler and server)
+  PERFORM init_handler_server
+       TABLES   return              poitem            poschedule
+                poaccount
+       USING
+                exppurchaseorder    "used in CHANGE/CREATE1 diff.
+                lo_const->hin                 no_messaging
+                no_message_req      no_authority
+                no_price_from_po
+       CHANGING
+                my_handler          l_po              l_messages.
+
+* docu: pre_processing (renumber items, INBOUND user exit, ...)
+  PERFORM pre_processing
+       TABLES   poitem             poitemx                 poaddrdelivery
+                poschedule         poschedulex             poaccount
+                poaccountx         poaccountprofitsegment  pocondheader
+                pocondheaderx      pocond                  pocondx
+                polimits           pocontractlimits        poservices
+                posrvaccessvalues  poservicestext          extensionin
+                poexpimpitem       poexpimpitemx           potextheader
+                potextitem         popartner               return
+                pocomponents       pocomponentsx
+                poshipping         poshippingx
+                serialnumber       serialnumberx            "EhP4 SN
+                invplanheader      invplanheaderx           "EhP4 IP
+                invplanitem        invplanitemx
+
+       USING    lo_const->hin
+       CHANGING my_handler         poheader                poheaderx
+                poaddrvendor       poexpimpheader          poexpimpheaderx
+                versions           exppurchaseorder        testrun
+                memory_complete    memory_uncomplete       no_messaging
+                no_message_req     no_authority            no_price_from_po.
+
+
+
+
+* docu: inbound mapping (BAPI interface -> internal tables)
+  PERFORM move_data_in
+       TABLES   return              poitem                  lt_item
+                poitemx             lt_itemx                poschedule
+                lt_schedule         poschedulex             lt_schedulex
+                poaccount           poaccountprofitsegment  lt_account
+                poaccountx          lt_accountx             pocondheader
+                lt_condheader_bapi  pocondheaderx
+                lt_condheaderx_bapi
+                pocond              lt_cond_bapi            pocondx
+                lt_condx_bapi       poexpimpitem
+                poexpimpitemx
+                lt_expimp_item      lt_expimp_itemx         extensionin
+                poaddrdelivery      lt_itemaddrzav          polimits
+                lt_esuh             pocontractlimits        lt_esuc
+                poservices          lt_esll
+                posrvaccessvalues
+                lt_eskl             poservicestext          lt_srv_text
+                potextheader        lt_text_header          potextitem "#EC *
+                lt_text_items       popartner               lt_partner
+                pocomponents        pocomponentsx           lt_comp
+                lt_compx            poshipping              lt_ekpv
+                poshippingx         lt_ekpvx
+                invplanheader       invplanheaderx          "EhP4 IP
+                invplanitem         invplanitemx
+       USING    lo_const->hin
+                l_po                poheader
+                poheaderx           poaddrvendor            versions
+       CHANGING
+                exppurchaseorder    "used in CHANGE/CREATE1 diff.
+                ls_header           lf_header_currency      ls_headerx
+                ls_dcm_erevitem     poexpimpheader
+                poexpimpheaderx
+                ls_expimp_header    ls_expimp_headerx
+                ls_headeraddrzav.
+
+
+* docu:
+* docu: relations between tables( fill delivery date in items using
+* docu:                           delivery date from schedule lines,...)
+  PERFORM add_relations TABLES lt_item     lt_itemx
+                               lt_schedule lt_schedulex.
+
+
+* docu:
+* docu: process non-integrated components (services, addresses)
+  PERFORM process_non_integrated_comp
+          TABLES   poaddrdelivery        lt_itemaddrzav      lt_item
+                   lt_itemx              lt_account          lt_accountx
+                   lt_esuh
+                   lt_esuc               lt_esll             lt_eskl
+                   lt_srv_text           lt_comsrv           lt_acc_tab
+                   return                lt_schedule
+          USING    l_po
+                   poaddrvendor          ls_headeraddrzav
+                   lo_const->hin         ls_header.
+
+
+* docu: set values of OO-objects
+  PERFORM set_object_attributes
+          TABLES   lt_item               lt_itemx            lt_schedule
+                   lt_schedulex          lt_account          lt_accountx
+                   lt_expimp_item        lt_expimp_itemx     lt_acc_tab
+                   lt_comsrv             lt_ekpv             lt_ekpvx
+          USING
+                   lo_const->hin         lt_comp
+          CHANGING
+                   ls_header             ls_headerx          l_po
+                   lt_models             ls_expimp_header
+                   ls_expimp_headerx.
+
+
+*docu: update, check and post document (texts, conditions and partners
+*included)
+* docu:
+  PERFORM process_po
+          TABLES   lt_condheaderx_bapi   lt_condx_bapi       lt_text_header
+                   lt_text_items         lt_partner          return
+                   lt_item               lt_itemx
+                   lt_comp               lt_compx
+                   lt_account            lt_accountx
+                   serialnumber[]        serialnumberx[]    "EhP4 SN
+          USING
+                   lt_condheader_bapi    lt_cond_bapi        ls_header
+                   lo_const->hin         ls_dcm_erevitem
+          CHANGING
+                   exppurchaseorder
+                   l_po                  lt_models           testrun
+                   memory_complete       memory_uncomplete
+                   park_complete         park_uncomplete.
+
+
+* docu: outbound mapping (internal tables -> BAPI interface)
+  exppurchaseorder = l_po->po_number.
+  PERFORM get_current_data
+          TABLES   poitem                poschedule          poaccount
+                   pocondheader          pocond              poaddrdelivery
+                   extensionout          poexpimpitem        poshippingexp
+                   allversions           popartner           potextheader
+                   potextitem            pocomponents        poservices
+                   polimits              pocontractlimits    posrvaccessvalues
+                   pohistory             pohistory_ma        pohistory_totals    poconfirmation
+                   serialnumber          invplanheader       invplanitem "EhP4 IP SN
+                   return
+          USING    lo_const->hin         l_po                lf_header_currency
+          CHANGING
+                   expheader             exppoexpimpheader.
+  exppoexpimpheader = poexpimpheader. "foreign trade export workaround
+
+
+* docu: post_processing (OUTBOUND user exit, collect messages, ...)
+  PERFORM post_processing
+          TABLES   poitem       poaddrdelivery          poschedule
+                   poaccount    poaccountprofitsegment  pocondheader
+                   pocond       polimits                pocontractlimits
+                   poservices   posrvaccessvalues       poservicestext
+                   extensionout poexpimpitem            potextheader
+                   potextitem   allversions             popartner
+                   return       pocomponents            poshippingexp
+                   serialnumber invplanheader           invplanitem "EhP4 SN/EhP4 IP
+          USING    lo_const->hin                        my_handler
+          CHANGING
+                   poheader     expheader
+                   poaddrvendor poexpimpheader          l_messages.
+
+* docu: clean up tables from OO purchase order
+  PERFORM cleanup USING l_po.
+end-enhancement-section.
+*$*$-Start: BAPI_PO_CREATE1_03------------------------------------------------------------------$*$*
+ENHANCEMENT 2  /NFM/MM_SAPL2012.    "active version
+* /NFM/ processing - C5007732
+  DATA:  it_nfmitms  TYPE  TABLE OF /NFM/BAPIDOCITM,    "N 1372886
+         ls_nfmitms  TYPE  /NFM/BAPIDOCITM.
+
+* N 1470072
+* This perform needs to be called before call to NF FM, as various
+* initializations, message control settings are done inside this form routine.
+* Otherwise, the perform renumber called inside FM /NFM/2012_PO_PREPROCESSING
+* may throw up error messages on the screen instead of returning the messages
+* in the return table parameter of the BAPI
+* docu:
+* docu: initialize (handler and server)
+      PERFORM init_handler_server                               "1229980
+      TABLES   RETURN              poitem            poschedule
+        poaccount
+      USING
+            exppurchaseorder  "used in CHANGE/CREATE1 diff.
+            lo_const->hin     no_messaging
+            no_message_req    no_authority
+            no_price_from_po
+      CHANGING
+        my_handler          l_po              l_messages.
+
+* N 1523764 Refresh sv_bapi_data at start (FORM get_bapi_data)
+  data: new_bapi_data  TYPE boole_d.
+
+  new_bapi_data = 'X'.
+  export new_bapi_data to memory id '/nfm/new_bapi_data'.
+
+* docu: pre_processing (renumber items)
+  call function '/NFM/2012_PO_PREPROCESSING'
+    exporting
+      im_act_type           = CL_MMPUR_CONSTANTS=>HIN
+    tables
+      t_return              = return
+      t_poitem              = poitem
+      t_poitemx             = poitemx
+      t_poaddrdelivery      = poaddrdelivery
+      t_poschedule          = poschedule
+      t_poschedulex         = poschedulex
+      t_poaccount           = poaccount
+      t_poaccountprofitsegment = poaccountprofitsegment        "N 1541687
+      t_poaccountx          = poaccountx
+      t_pocondheader        = pocondheader
+      t_pocondheaderx       = pocondheaderx
+      t_pocond              = pocond
+      t_pocondx             = pocondx
+      t_extensionin         = extensionin
+      t_poexpimpitem        = poexpimpitem
+      t_poexpimpitemx       = poexpimpitemx
+      t_potextheader        = potextheader
+      t_potextitem          = potextitem
+      t_popartner           = popartner
+      t_nfmetallitms        = nfmetallitms
+      t_pocomponents        = pocomponents          "N 1409498
+      t_pocomponentsx       = pocomponentsx
+      t_poitemship          = poshipping
+      t_poitemshipx         = poshippingx
+      T_CHT_SERNO           = SERIALNUMBER
+      T_SERNOX              = SERIALNUMBERX
+      T_IP_HEADER           = INVPLANHEADER
+      T_IP_HEADERX          = INVPLANHEADERX
+      T_IP_ITEM             = INVPLANITEM
+      T_IP_ITEMX            = INVPLANITEMX
+    changing
+      ch_poheader           = poheader
+      ch_poheaderx          = poheaderx.
+
+  LOOP AT nfmetallitms INTO ls_nfmitms.    "N 1372886
+    ls_nfmitms-doc_number = ''.
+    APPEND ls_nfmitms TO it_nfmitms.
+  ENDLOOP.
+
+* docu: transfer NFM data to memory
+  call function '/NFM/CA_BAPI_TRANSFER_DOCITM'
+    exporting
+      im_doc_type_nfm    = 'B'
+      im_comp_code       = poheader-comp_code
+*     im_documentin      = poheader-po_number    "N 1372886
+      im_simulation      = testrun
+    tables
+*     t_nfmetallitms     = nfmetallitms          "N 1372886
+      t_nfmetallitms     = it_nfmitms
+      t_return           = return.
+* check if error occurred
+  loop at return transporting no fields
+                    where type = 'E' or
+                          type = 'A'.
+    exit.
+  endloop.
+  if sy-subrc <> 0.
+
+* N 1470072
+** docu:
+** docu: initialize (handler and server)
+*  PERFORM init_handler_server                               "1229980
+*       TABLES   return              poitem            poschedule
+*                poaccount
+*       USING
+*                exppurchaseorder    "used in CHANGE/CREATE1 diff.
+*                cl_mmpur_constants=>hin      no_messaging
+*                no_message_req      no_authority
+*                no_price_from_po
+*       CHANGING
+*                my_handler          l_po              l_messages.
+
+* docu: pre_processing (renumber items, INBOUND user exit, ...)
+  PERFORM pre_processing
+       TABLES   poitem             poitemx                 poaddrdelivery
+                poschedule         poschedulex             poaccount
+                poaccountx         poaccountprofitsegment  pocondheader
+                pocondheaderx      pocond                  pocondx
+                polimits           pocontractlimits        poservices
+                posrvaccessvalues  poservicestext          extensionin
+                poexpimpitem       poexpimpitemx           potextheader
+                potextitem         popartner               return
+                pocomponents       pocomponentsx
+                poshipping         poshippingx
+                serialnumber       serialnumberx            "EhP4 SN
+                invplanheader      invplanheaderx           "EhP4 IP
+                invplanitem        invplanitemx
+       USING
+                cl_mmpur_constants=>hin
+       CHANGING my_handler         poheader                poheaderx
+                poaddrvendor       poexpimpheader          poexpimpheaderx
+                versions           exppurchaseorder        testrun
+                memory_complete    memory_uncomplete       no_messaging
+                no_message_req     no_authority            no_price_from_po.
+
+
+
+* docu: inbound mapping (BAPI interface -> internal tables)
+  PERFORM move_data_in
+       TABLES   return              poitem                  lt_item
+                poitemx             lt_itemx                poschedule
+                lt_schedule         poschedulex             lt_schedulex
+                poaccount           poaccountprofitsegment  lt_account
+                poaccountx          lt_accountx             pocondheader
+                lt_condheader_bapi  pocondheaderx
+                lt_condheaderx_bapi
+                pocond              lt_cond_bapi            pocondx
+                lt_condx_bapi       poexpimpitem
+                poexpimpitemx
+                lt_expimp_item      lt_expimp_itemx         extensionin
+                poaddrdelivery      lt_itemaddrzav          polimits
+                lt_esuh             pocontractlimits        lt_esuc
+                poservices          lt_esll
+                posrvaccessvalues
+                lt_eskl             poservicestext          lt_srv_text
+                potextheader        lt_text_header          potextitem "#EC *
+                lt_text_items       popartner               lt_partner
+                pocomponents        pocomponentsx           lt_comp
+                lt_compx            poshipping              lt_ekpv
+                poshippingx         lt_ekpvx
+                invplanheader       invplanheaderx          "EhP4 IP
+                invplanitem         invplanitemx
+       USING    cl_mmpur_constants=>hin
+                l_po                poheader
+                poheaderx           poaddrvendor            versions
+       CHANGING
+                exppurchaseorder    "used in CHANGE/CREATE1 diff.
+                ls_header           lf_header_currency      ls_headerx
+                ls_dcm_erevitem     poexpimpheader
+                poexpimpheaderx
+                ls_expimp_header    ls_expimp_headerx
+                ls_headeraddrzav.
+
+
+* docu:
+* docu: relations between tables( fill delivery date in items using
+* docu:                           delivery date from schedule lines,...)
+  PERFORM add_relations TABLES lt_item     lt_itemx
+                               lt_schedule lt_schedulex.
+
+
+* docu:
+* docu: process non-integrated components (services, addresses)
+  PERFORM process_non_integrated_comp
+          TABLES   poaddrdelivery        lt_itemaddrzav      lt_item
+                   lt_itemx              lt_account          lt_accountx
+                   lt_esuh
+                   lt_esuc               lt_esll             lt_eskl
+                   lt_srv_text           lt_comsrv           lt_acc_tab
+                   return                lt_schedule
+          USING    l_po
+                   poaddrvendor          ls_headeraddrzav
+                   cl_mmpur_constants=>hin    ls_header.
+
+
+* docu: set values of OO-objects
+  PERFORM set_object_attributes
+          TABLES   lt_item               lt_itemx            lt_schedule
+                   lt_schedulex          lt_account          lt_accountx
+                   lt_expimp_item        lt_expimp_itemx     lt_acc_tab
+                   lt_comsrv             lt_ekpv             lt_ekpvx
+          USING
+                   cl_mmpur_constants=>hin    lt_comp
+          CHANGING
+                   ls_header             ls_headerx          l_po
+                   lt_models             ls_expimp_header
+                   ls_expimp_headerx.                       "953358
+
+
+*docu: update, check and post document (texts, conditions and partners
+*included)
+* docu:
+  PERFORM process_po
+          TABLES   lt_condheaderx_bapi   lt_condx_bapi       lt_text_header
+                   lt_text_items         lt_partner          return
+                   lt_item               lt_itemx
+                   lt_comp               lt_compx
+                   lt_account            lt_accountx
+                   serialnumber[]        serialnumberx[]    "EhP4 SN
+          USING
+                   lt_condheader_bapi    lt_cond_bapi        ls_header
+                   cl_mmpur_constants=>hin ls_dcm_erevitem    "953358
+          CHANGING
+                   exppurchaseorder
+                   l_po                  lt_models           testrun
+                   memory_complete       memory_uncomplete
+                   park_complete         park_uncomplete.
+
+* docu: outbound mapping (internal tables -> BAPI interface)
+  exppurchaseorder = l_po->po_number.
+  PERFORM get_current_data
+          TABLES   poitem                poschedule          poaccount
+                   pocondheader          pocond              poaddrdelivery
+                   extensionout          poexpimpitem        poshippingexp
+                   allversions           popartner           potextheader
+                   potextitem            pocomponents        poservices
+                   polimits              pocontractlimits    posrvaccessvalues
+                   pohistory             pohistory_ma        pohistory_totals    poconfirmation
+                   serialnumber          invplanheader       invplanitem "EhP4 IP SN
+                   return
+          USING
+                   cl_mmpur_constants=>hin
+                   l_po                lf_header_currency
+          CHANGING
+                   expheader             exppoexpimpheader.
+  exppoexpimpheader = poexpimpheader. "foreign trade export workaround
+
+
+* docu: post_processing (OUTBOUND user exit, collect messages, ...)
+  PERFORM post_processing
+          TABLES   poitem       poaddrdelivery          poschedule
+                   poaccount    poaccountprofitsegment  pocondheader
+                   pocond       polimits                pocontractlimits
+                   poservices   posrvaccessvalues       poservicestext
+                   extensionout poexpimpitem            potextheader
+                   potextitem   allversions             popartner
+                   return       pocomponents            poshippingexp
+                   serialnumber invplanheader           invplanitem "EhP4 SN/EhP4 IP
+          USING
+                   cl_mmpur_constants=>hin   my_handler
+          CHANGING
+                   poheader     expheader
+                   poaddrvendor poexpimpheader          l_messages.
+
+* docu: clean up tables from OO purchase order
+  PERFORM cleanup USING l_po.
+
+* /NFM/ processing - C5007732
+* docu: /NFM/ outbound mapping (internal tables -> BAPI interface)
+    call function '/NFM/CA_BAPI_DOCITM_GET'
+      tables
+        t_nfmetallitms     = nfmetallitms.
+  else.
+* docu: reset the dialogflag
+    CALL FUNCTION 'DIALOG_SET_WITH_DIALOG'
+      EXCEPTIONS
+        error_message = 0
+        OTHERS        = 0.
+  endif.                             "sy-subrc <> 0.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE1_03------------------------------------------------------------------$*$*
+
+
+  IF l_flg NE space.
+    COMMIT WORK.
+  ENDIF.
+
+enhancement-point bapi_po_create1_g7 spots es_sapl2012.
+*$*$-Start: BAPI_PO_CREATE1_G7------------------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_PO_CREATE1.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = POCOMPONENTS
+  .
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES3
+  T_MATNR  = POITEM
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_PO_CREATE1_G7------------------------------------------------------------------$*$*
+ENDFUNCTION.

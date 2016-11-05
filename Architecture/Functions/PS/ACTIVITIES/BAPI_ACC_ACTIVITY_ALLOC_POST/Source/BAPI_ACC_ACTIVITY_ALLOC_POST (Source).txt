@@ -1,0 +1,119 @@
+function bapi_acc_activity_alloc_post .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(DOC_HEADER) LIKE  BAPIDOCHDRP STRUCTURE  BAPIDOCHDRP
+*"     VALUE(IGNORE_WARNINGS) LIKE  BAPIIW-IGNWARN DEFAULT SPACE
+*"  EXPORTING
+*"     VALUE(DOC_NO) LIKE  BAPIDOCHDRP-DOC_NO
+*"  TABLES
+*"      DOC_ITEMS STRUCTURE  BAPIAAITM
+*"      RETURN STRUCTURE  BAPIRET2
+*"      CRITERIA STRUCTURE  BAPIACKECR OPTIONAL
+*"      CUSTOMER_FIELDS STRUCTURE  BAPIEXTC OPTIONAL
+*"----------------------------------------------------------------------
+ENHANCEMENT-POINT BAPI_ACC_ACTIVITY_ALLOC_POS_G8 SPOTS ES_SAPLK40C STATIC.
+*$*$-Start: BAPI_ACC_ACTIVITY_ALLOC_POS_G8------------------------------------------------------$*$*
+ENHANCEMENT 3  DIMP_GENERAL_SAPLK40C.    "active version
+DATA: T_MGV_FNAMES1 LIKE MGVBAPIFNAMES OCCURS 0 WITH HEADER LINE.
+ENDENHANCEMENT.
+*$*$-End:   BAPI_ACC_ACTIVITY_ALLOC_POS_G8------------------------------------------------------$*$*
+
+ENHANCEMENT-POINT BAPI_ACC_ACTIVITY_ALLOC_POS_G6 SPOTS ES_SAPLK40C.
+*$*$-Start: BAPI_ACC_ACTIVITY_ALLOC_POS_G6------------------------------------------------------$*$*
+ENHANCEMENT 1  MGV_GENERATED_BAPI_ACC_ACTI000.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+*Do not change coding between begin and end comments. ANI 20050118
+T_MGV_FNAMES1-INT = 'MATERIAL'.
+T_MGV_FNAMES1-EXT = 'MATERIAL_EXTERNAL'.
+T_MGV_FNAMES1-VERS = 'MATERIAL_VERSION'.
+T_MGV_FNAMES1-GUID = 'MATERIAL_GUID'.
+APPEND T_MGV_FNAMES1.
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = ' '
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = DOC_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_ACC_ACTIVITY_ALLOC_POS_G6------------------------------------------------------$*$*
+
+
+    data:
+        s_doc_header type cobk,
+        s_header_ext type coheader_ext,
+        t_doc_items  type table of rk40c with header line,
+        t_ext_prices type table of coexprices with header line,
+        t_messages   type table of mesg with header line.
+
+
+    clear g_abbruch.
+
+    g_activity  = act-crea.
+    s_doc_header-vrgng = vrgng-l.
+
+*   initialise message handler
+    perform init_message_handler.
+
+    if not g_abbruch is initial.
+        exit.
+    endif.
+
+*   map external to internal data structures
+    perform map_external_to_internal
+        tables
+            doc_items
+            customer_fields
+            t_doc_items
+            t_ext_prices
+        using
+            doc_header
+        changing
+            s_doc_header
+            s_header_ext.
+
+    call function 'K40C_CO_ACTUAL_POSTING'
+        exporting
+            id_ignore_warnings = ignore_warnings
+        tables
+            it_doc_items       = t_doc_items
+            it_ext_prices      = t_ext_prices
+            it_rec_criteria    = criteria
+            et_messages        = t_messages
+        changing
+            cs_doc_header      = s_doc_header
+            cs_doc_header_ext  = s_header_ext
+        exceptions
+            others             = 1.
+
+*   map internal to external data structures
+    perform map_internal_to_external
+        tables
+            t_messages
+            return
+        using
+            s_doc_header
+            ignore_warnings
+        changing
+            doc_no.
+
+*   reset message handler to initial state at call
+    perform exit_message_handler.
+
+ENHANCEMENT-POINT BAPI_ACC_ACTIVITY_ALLOC_POS_G7 SPOTS ES_SAPLK40C.
+*$*$-Start: BAPI_ACC_ACTIVITY_ALLOC_POS_G7------------------------------------------------------$*$*
+ENHANCEMENT 2  MGV_GENERATED_BAPI_ACC_ACTI000.    "active version
+*{BAPI Begin} generation http://intranet.sap.com/materialversion
+CALL FUNCTION 'MATNR_BAPI_TABLES_CONVERSION'
+EXPORTING
+  INT_TO_EXTERNAL = 'X'
+TABLES
+  T_FNAMES = T_MGV_FNAMES1
+  T_MATNR  = DOC_ITEMS
+  .
+*{BAPI End} generation
+ENDENHANCEMENT.
+*$*$-End:   BAPI_ACC_ACTIVITY_ALLOC_POS_G7------------------------------------------------------$*$*
+endfunction.

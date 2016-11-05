@@ -1,0 +1,801 @@
+FUNCTION bapi_internalorder_create.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(I_MASTER_DATA) LIKE  BAPI2075_7 STRUCTURE  BAPI2075_7
+*"     VALUE(TESTRUN) LIKE  BAPI0012_GEN-TESTRUN OPTIONAL
+*"  EXPORTING
+*"     VALUE(E_MASTER_DATA) LIKE  BAPI2075_2 STRUCTURE  BAPI2075_2
+*"     VALUE(ORDERID) LIKE  BAPI2075_2-ORDER
+*"  TABLES
+*"      SRULES STRUCTURE  BAPI2075_6 OPTIONAL
+*"      RETURN STRUCTURE  BAPIRET2 OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"----------------------------------------------------------------------
+  TABLES: tkb8a.
+
+  DATA: coas     LIKE coas,
+        orext    LIKE orext,
+        kauf     LIKE kauf,
+        cobl     LIKE cobl,
+        i_srules LIKE bapi2075_6,
+        index    LIKE kauf-auf_index,
+        it_ret2  LIKE bapiret2,
+        wa_ret1  LIKE bapireturn,
+        message_v1 LIKE sy-msgv1,
+        number     LIKE sy-msgno,
+        message_v2 LIKE sy-msgv2,
+        message_v3 LIKE sy-msgv3,
+        add_para   LIKE cobr_info,
+        konty      LIKE tkb2c-konty,
+        flg_leave_bapi LIKE sy-batch.
+
+  DATA: BEGIN OF it_dftab OCCURS 0.
+          INCLUDE STRUCTURE dftabelle.
+  DATA: END OF it_dftab.
+
+  DATA: BEGIN OF ld_srules,       "contains fields that need conversion
+             perbz      LIKE cobrb-perbz,
+             aufpl      LIKE cobrb-aufpl,
+             aplzl      LIKE cobrb-aplzl,
+             ps_psp_pnr LIKE cobrb-ps_psp_pnr,
+        END OF ld_srules.
+
+  STATICS: fname_tab LIKE fname_tab_def OCCURS 30 WITH HEADER LINE.
+
+  DATA: help_name(60).
+  FIELD-SYMBOLS: <f_coas>, <f_orext>, <f_i_md>, <f_e_md>, <field>.
+
+  DATA: lt_cobra LIKE cobra OCCURS 1 WITH HEADER LINE.
+  DATA: lt_cobrb LIKE cobrb OCCURS 1 WITH HEADER LINE.
+
+  DATA: ld_mesg_active(1) TYPE c.                           "note353492
+
+  PERFORM messages_pause CHANGING ld_mesg_active.           "note353492
+
+*------------- initialization ----------------------------------------
+* fill fname_tab on first call of function module
+  IF ( fname_tab IS INITIAL ).
+    PERFORM fill_fname_tab TABLES fname_tab.
+  ENDIF.
+
+  CALL FUNCTION 'FUNC_AREA_CONVERSION_INBOUND'
+    EXPORTING
+      i_func_area      = i_master_data-func_area
+      i_func_area_long = i_master_data-func_area_long
+    IMPORTING
+      e_func_area_long = i_master_data-func_area_long.
+* map I_MASTER_DATA on OREXT
+  orext-aufnr = i_master_data-order.
+
+  LOOP AT fname_tab WHERE ( NOT orext_name IS initial ) AND
+                          ( NOT bapi7_name IS initial ).
+    CLEAR help_name.
+    help_name = 'OREXT-'.
+    help_name+6 = fname_tab-orext_name.
+    ASSIGN (help_name) TO <f_orext>.
+    IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH help_name. ENDIF.
+
+    CLEAR help_name.
+    help_name = 'I_MASTER_DATA-'.
+    help_name+14 = fname_tab-bapi7_name.
+    ASSIGN (help_name) TO <f_i_md>.
+    IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH help_name. ENDIF.
+
+    <f_orext> = <f_i_md>.
+
+  ENDLOOP.
+
+* convert currency to internal format
+  CLEAR wa_ret1.
+  CALL FUNCTION 'BAPI_CURRENCY_CONV_TO_INTERNAL'
+    EXPORTING
+      currency             = i_master_data-currency
+      amount_external      = i_master_data-estimated_costs
+      max_number_of_digits = 14
+    IMPORTING
+      amount_internal      = orext-user4
+      return               = wa_ret1.
+  IF ( NOT wa_ret1 IS INITIAL ).
+    MOVE-CORRESPONDING wa_ret1 TO return.
+    return-id     = wa_ret1-code+0(2).
+    return-number = wa_ret1-code+2(3).
+    APPEND return.
+  ENDIF.
+
+* set statistic flag
+  IF ( NOT i_master_data-cctr_posted IS INITIAL ).
+    orext-astkz = 'X'.
+  ENDIF.
+
+*----------------- create order ---------------------------------------
+* create master data without saving
+  CALL FUNCTION 'KAUF_ORDER_CREATE'
+    EXPORTING
+      i_autyp_erl   = '01,02'
+      i_dialog      = ' '
+      i_orext       = orext
+      i_save_flag   = ' '
+    IMPORTING
+      e_index       = index
+      e_coas        = coas
+      e_kauf        = kauf
+    EXCEPTIONS
+      error_message = 2
+      OTHERS        = 1.
+  IF ( sy-subrc <> 0 ).
+    PERFORM append_return_and_reset TABLES return
+                                    USING  sy.
+    REFRESH fname_tab. CLEAR fname_tab.
+    PERFORM messages_continue USING ld_mesg_active.         "note353492
+    EXIT.
+  ENDIF.
+
+*--------------- handle customer extension CI_AUFK --------------------
+* move fields from Extension to COAS
+  PERFORM map_user_fields TABLES extensionin
+                          CHANGING coas.
+
+* store user fields in buffer
+  CALL FUNCTION 'KAUF_ORDER_STORE'
+    EXPORTING
+      i_coas              = coas
+      i_kauf              = kauf
+    EXCEPTIONS
+      illegal_change      = 1
+      order_not_in_buffer = 2
+      OTHERS              = 3.
+  IF sy-subrc <> 0.
+    PERFORM append_return_and_reset TABLES return
+                                    USING  sy.
+    REFRESH fname_tab. CLEAR fname_tab.
+  ENDIF.
+
+*-------------- settlement rule ------------------------------
+* check whether srule exists already
+  CALL FUNCTION 'K_SETTLEMENT_RULE_GET'
+    EXPORTING
+      objnr     = coas-objnr
+    TABLES
+      e_cobra   = lt_cobra
+      e_cobrb   = lt_cobrb
+    EXCEPTIONS
+      not_found = 1
+      OTHERS    = 2.
+  IF ( sy-subrc = 2 ).
+    PERFORM append_return_and_reset TABLES return
+                                    USING  sy.
+    REFRESH fname_tab. CLEAR fname_tab.
+    REFRESH lt_cobra. CLEAR lt_cobra.
+    REFRESH lt_cobrb. CLEAR lt_cobrb.
+    PERFORM messages_continue USING ld_mesg_active.         "note353492
+    EXIT.
+  ELSEIF sy-subrc = 1.
+*  do nothing continue below.
+  ELSE.
+    IF NOT lt_cobrb[] IS INITIAL
+*     ... lt_cobrb[] from model order AND srules[] from the
+*     BAPI interface ...                                        HW629863
+      AND NOT srules[] IS INITIAL .                            "HW629863
+      REFRESH lt_cobra. CLEAR lt_cobra.
+      REFRESH lt_cobrb. CLEAR lt_cobrb.
+*     if rules exist delete all
+      CALL FUNCTION 'K_SETTLEMENT_RULE_DELETE'                "Hw540762
+        EXPORTING
+          objnr             = coas-objnr
+        EXCEPTIONS
+          enqueue_failure   = 1
+          foreign_lock      = 2
+          objnr_not_found   = 3
+          used_rule_found   = 4
+          no_rule_for_objnr = 5
+          OTHERS            = 6.
+      IF sy-subrc <> 0.
+        PERFORM append_return_and_reset TABLES return
+                                        USING  sy.
+        REFRESH fname_tab. CLEAR fname_tab.
+        PERFORM messages_continue USING ld_mesg_active.     "note353492
+        EXIT.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+* create settlement rule without saving
+  LOOP AT srules.
+*   default rule table TKB2C is maintained as 'I_SRULES' therefore
+*   aditional work area is needed.
+    i_srules = srules.
+*   fill COBL to find KONTY
+    cobl-kokrs        = coas-kokrs.
+    cobl-gsber        = srules-bus_area.
+    cobl-bukrs        = srules-comp_code.
+    cobl-saknr        = srules-gl_account.
+    cobl-prctr        = srules-profit_ctr.
+    cobl-kostl        = srules-costcenter.
+    cobl-aufnr        = srules-orderid.
+    CALL FUNCTION 'CJPN_EXTERN_TO_INTERN_CONV'
+      EXPORTING
+        ext_num       = srules-wbs_element
+      IMPORTING
+        int_num       = cobl-ps_psp_pnr
+      EXCEPTIONS
+        error_message = 2
+        OTHERS        = 1.
+    IF ( sy-subrc <> 0 ).
+      PERFORM append_return_and_reset TABLES return
+                                      USING  sy.
+      REFRESH fname_tab. CLEAR fname_tab.
+      PERFORM messages_continue USING ld_mesg_active.       "note353492
+      flg_leave_bapi = 'X'.                                 "Note 686235
+      EXIT.
+    ENDIF.
+    cobl-anln1        = srules-asset_no.
+    cobl-anln2        = srules-sub_number.
+    cobl-nplnr        = srules-network.
+    cobl-vornr        = srules-activity.
+    cobl-kdauf        = srules-sales_ord.
+    cobl-kdpos        = srules-s_ord_item.
+    cobl-kstrg        = srules-cost_obj.
+    cobl-prznr        = srules-co_busproc.
+*   get ASSIGN information in IT_DFTAB
+    CLEAR konty.
+    CALL FUNCTION 'K_DEFAULT_RULE_READ'
+      EXPORTING
+        dfreg         = 'BAP'
+        obart         = 'OR'
+        i_cobl        = cobl
+      IMPORTING
+        e_konty       = konty
+      TABLES
+        dftab         = it_dftab
+      EXCEPTIONS
+        error_message = 2
+        OTHERS        = 1.
+    IF ( sy-subrc <> 0 ).
+      PERFORM append_return_and_reset TABLES return
+                                      USING  sy.
+      REFRESH fname_tab. CLEAR fname_tab.
+      flg_leave_bapi = 'X'.
+      EXIT.
+    ENDIF.
+*   fields in LD_SRULES are internal formats of srules fields
+    SELECT * FROM tkb8a
+           WHERE spras    = 'E'
+           AND   perbz_ld = srules-settl_type.
+      IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH 'SELECT TKB8A'. ENDIF.
+      ENDSELECT.
+      ld_srules-perbz = tkb8a-perbz.
+
+      ld_srules-ps_psp_pnr = cobl-ps_psp_pnr.
+
+      IF ( NOT srules-network IS INITIAL ).
+        CALL FUNCTION 'CO_SF_NETWORKACTIVITY_CHECK'
+          EXPORTING
+            aufnr_imp     = srules-network
+            vornr_imp     = srules-activity
+          IMPORTING
+            aufpl_exp     = ld_srules-aufpl
+            aplzl_exp     = ld_srules-aplzl              "#EC DOM_EQUAL
+          EXCEPTIONS
+            error_message = 2
+            OTHERS        = 1.
+        IF ( sy-subrc <> 0 ).
+          PERFORM append_return_and_reset TABLES return
+                                          USING  sy.
+          REFRESH fname_tab. CLEAR fname_tab.
+          flg_leave_bapi = 'X'.
+          EXIT.
+        ENDIF.
+      ENDIF.
+
+*   move values to IT_DFTAB
+      LOOP AT it_dftab.
+        ASSIGN (it_dftab-fdnam) TO <field>.
+      IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH it_dftab-fdnam. ENDIF.
+        MOVE <field> TO it_dftab-fdinh.
+        MODIFY it_dftab.
+      ENDLOOP.                           "IT_DFTAB
+*   create settlementrule
+      add_para-kokrs = i_master_data-co_area.
+      add_para-bukrs = i_master_data-comp_code.
+      CALL FUNCTION 'K_POSTING_RULE_INSERT'
+        EXPORTING
+          add_para        = add_para
+          aprof           = kauf-par_aprof
+          dfreg           = 'BAP'
+          konty           = konty
+          flg_objnr_check = ' '
+          objnr           = coas-objnr
+        TABLES
+          dftab           = it_dftab
+        EXCEPTIONS
+          error_message   = 2
+          OTHERS          = 1.
+      IF ( sy-subrc <> 0 ).
+        PERFORM append_return_and_reset TABLES return
+                                        USING  sy.
+        REFRESH fname_tab. CLEAR fname_tab.
+        flg_leave_bapi = 'X'.
+        EXIT.
+      ENDIF.
+    ENDLOOP.                             "srules
+    IF ( NOT flg_leave_bapi IS INITIAL ).
+      PERFORM messages_continue USING ld_mesg_active.       "note353492
+      EXIT.
+    ENDIF.
+
+*--------------save master data and settlement rule now-----------------
+    CALL FUNCTION 'KAUF_ORDER_SAVE'
+      EXPORTING
+        i_dialog      = ' '
+        i_index       = index
+        i_check       = 'X'
+        i_testrun     = testrun
+      IMPORTING
+        e_coas        = coas
+      EXCEPTIONS
+        error_message = 2
+        OTHERS        = 1.
+    IF ( sy-subrc <> 0 ).
+      PERFORM append_return_and_reset TABLES return
+                                USING  sy.
+      REFRESH fname_tab. CLEAR fname_tab.
+      PERFORM messages_continue USING ld_mesg_active.       "note353492
+      EXIT.
+    ELSE.
+*   success message
+      IF testrun IS INITIAL.
+        message_v1 = coas-aufnr.
+        CALL FUNCTION 'BALW_BAPIRETURN_GET2'
+          EXPORTING
+            type   = 'S'
+            cl     = 'KO'
+            number = '107'
+            par1   = message_v1
+          IMPORTING
+            return = return.
+      ELSE.
+        CALL FUNCTION 'BALW_BAPIRETURN_GET2'
+          EXPORTING
+            type   = 'S'
+            cl     = 'KO'
+            number = '497'
+          IMPORTING
+            return = return.
+      ENDIF.
+      APPEND return.
+    ENDIF.
+
+*------------------ fill return parameters ----------------------------
+* map COAS on E_MASTER_DATA
+    e_master_data-order = coas-aufnr.
+    orderid = coas-aufnr.                                   "ALRK190270
+
+    LOOP AT fname_tab WHERE ( NOT coas_name  IS initial ) AND
+                ( NOT bapi2_name IS initial ).
+      CLEAR help_name.
+      help_name = 'COAS-'.
+      help_name+5 = fname_tab-coas_name.
+      ASSIGN (help_name) TO <f_coas>.
+      IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH help_name. ENDIF.
+
+      CLEAR help_name.
+      help_name = 'E_MASTER_DATA-'.
+      help_name+14 = fname_tab-bapi2_name.
+      ASSIGN (help_name) TO <f_e_md>.
+      IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH help_name. ENDIF.
+
+      <f_e_md> = <f_coas>.
+    ENDLOOP.
+
+* convert currency to BAPI-format
+    CALL FUNCTION 'BAPI_CURRENCY_CONV_TO_EXTERNAL'
+      EXPORTING
+        currency        = e_master_data-currency
+        amount_internal = coas-user4
+      IMPORTING
+        amount_external = i_master_data-estimated_costs.
+
+* get internal format for WBS-Element
+    CALL FUNCTION 'CJPN_INTERN_TO_EXTERN_CONV'
+      EXPORTING
+        int_num = e_master_data-wbs_elem
+      IMPORTING
+        ext_num = e_master_data-wbs_element_ext.
+
+* get object key OBJNR
+    CALL FUNCTION 'OBJECT_NUMBER_READ_OR'
+      EXPORTING
+        aufnr = e_master_data-order
+      IMPORTING
+        objnr = e_master_data-object_no.
+
+* 4.7 enhancement
+* fill function area (short, out of use) with function area long
+    CALL FUNCTION 'FUNC_AREA_CONVERSION_OUTBOUND'
+      EXPORTING
+        i_func_area_long = e_master_data-func_area_long
+      IMPORTING
+        e_func_area      = e_master_data-func_area.
+
+* compare E_MASTER_DATA with I_MASTER_DATA
+    LOOP AT fname_tab  WHERE ( NOT bapi2_name IS initial ) AND
+                             ( NOT bapi7_name IS initial ).
+      CLEAR help_name.
+      help_name = 'I_MASTER_DATA-'.
+      help_name+14 = fname_tab-bapi7_name.
+      ASSIGN (help_name) TO <f_i_md>.
+      IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH help_name. ENDIF.
+
+      CLEAR help_name.
+      help_name = 'E_MASTER_DATA-'.
+      help_name+14 = fname_tab-bapi2_name.
+      ASSIGN (help_name) TO <f_e_md>.
+      IF ( sy-subrc <> 0 ). MESSAGE x208(00) WITH help_name. ENDIF.
+
+      IF ( <f_e_md> <> <f_i_md> ).
+*   send no message if ORDERID is set internally
+      IF ( fname_tab-bapi2_name = 'ORDER' ) AND ( <f_i_md> IS INITIAL ).
+          CONTINUE.
+        ENDIF.
+        message_v1 =  fname_tab-bapi7_name.
+        message_v2 =  <f_i_md>.
+        message_v3 =  <f_e_md>.
+        IF ( <f_e_md> IS INITIAL ).
+          number = '499'.
+        ELSE.
+          number =  '488'.
+        ENDIF.
+        CALL FUNCTION 'BALW_BAPIRETURN_GET2'
+          EXPORTING
+            type   = 'I'
+            cl     = 'KO'
+            number = '488'
+            par1   = message_v1
+            par2   = message_v2
+            par3   = message_v3
+          IMPORTING
+            return = return.
+        APPEND return.
+      ENDIF.
+
+    ENDLOOP.
+
+  PERFORM messages_continue USING ld_mesg_active.           "note353492
+
+  ENDFUNCTION.
+
+*&---------------------------------------------------------------------*
+*&      Form  FILL_FNAME_TAB
+*&---------------------------------------------------------------------*
+*       this form needs to be updated in case new fields are
+*       ammended to BAPI2075_7
+*----------------------------------------------------------------------*
+*      <-->P_FNAME_TAB  (mapping table for fieldnames)
+*----------------------------------------------------------------------*
+FORM fill_fname_tab TABLES fname_tab STRUCTURE fname_tab_def.
+
+
+  fname_tab-coas_name = 'AUFNR'.
+  fname_tab-orext_name = 'AUFNR'.
+  fname_tab-bapi2_name = 'ORDER'.
+  fname_tab-bapi7_name = 'ORDER'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'AUART'.
+  fname_tab-orext_name = 'AUART'.
+  fname_tab-bapi2_name = 'ORDER_TYPE'.
+  fname_tab-bapi7_name = 'ORDER_TYPE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'KTEXT'.
+  fname_tab-orext_name = 'KTEXT'.
+  fname_tab-bapi2_name = 'ORDER_NAME'.
+  fname_tab-bapi7_name = 'ORDER_NAME'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'KOKRS'.
+  fname_tab-orext_name = 'KOKRS'.
+  fname_tab-bapi2_name = 'CO_AREA'.
+  fname_tab-bapi7_name = 'CO_AREA'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'BUKRS'.
+  fname_tab-orext_name = 'BUKRS'.
+  fname_tab-bapi2_name = 'COMP_CODE'.
+  fname_tab-bapi7_name = 'COMP_CODE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'GSBER'.
+  fname_tab-orext_name = 'GSBER'.
+  fname_tab-bapi2_name = 'BUS_AREA'.
+  fname_tab-bapi7_name = 'BUS_AREA'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'WERKS'.
+  fname_tab-orext_name = 'WERKS'.
+  fname_tab-bapi2_name = 'PLANT'.
+  fname_tab-bapi7_name = 'PLANT'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'PRCTR'.
+  fname_tab-orext_name = 'PRCTR'.
+  fname_tab-bapi2_name = 'PROFIT_CTR'.
+  fname_tab-bapi7_name = 'PROFIT_CTR'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'KOSTV'.
+  fname_tab-orext_name = 'KOSTV'.
+  fname_tab-bapi2_name = 'RESPCCTR'.
+  fname_tab-bapi7_name = 'RESPCCTR'.
+  APPEND fname_tab.
+
+* in charge user / verantwortlicher Benutzer                        "6.0
+  fname_tab-coas_name  = 'VERAA_USER'.
+  fname_tab-orext_name = 'VERAA_USER'.
+  fname_tab-bapi2_name = 'IN_CHARGE_USER'.
+  fname_tab-bapi7_name = 'IN_CHARGE_USER'.
+  APPEND fname_tab.
+
+* WBS external format
+  fname_tab-coas_name  = space.
+  fname_tab-orext_name = 'POSID'.
+  fname_tab-bapi2_name = 'WBS_ELEMENT_EXT'.
+  fname_tab-bapi7_name = 'WBS_ELEMENT'.
+  APPEND fname_tab.
+
+* WBS internal format
+  fname_tab-coas_name  = 'PSPEL'.
+  fname_tab-orext_name = space.
+  fname_tab-bapi2_name = 'WBS_ELEM'.
+  fname_tab-bapi7_name = space.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'AKSTL'.
+  fname_tab-orext_name = 'AKSTL'.
+  fname_tab-bapi2_name = 'REQUEST_CCTR'.
+  fname_tab-bapi7_name = 'REQUEST_CCTR'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'ABUKR'.
+  fname_tab-orext_name = 'ABUKR'.
+  fname_tab-bapi2_name = 'REQU_COMP_CODE'.
+  fname_tab-bapi7_name = 'REQU_COMP_CODE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'KDAUF'.
+  fname_tab-orext_name = 'KDAUF'.
+  fname_tab-bapi2_name = 'SALES_ORD'.
+  fname_tab-bapi7_name = 'SALES_ORD'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'KDPOS'.
+  fname_tab-orext_name = 'KDPOS'.
+  fname_tab-bapi2_name = 'S_ORD_ITEM'.
+  fname_tab-bapi7_name = 'S_ORD_ITEM'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'TXJCD'.
+  fname_tab-orext_name = 'TXJCD'.
+  fname_tab-bapi2_name = 'TAXJURCODE'.
+  fname_tab-bapi7_name = 'TAXJURCODE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'CYCLE'.
+  fname_tab-orext_name = 'CYCLE'.
+  fname_tab-bapi2_name = 'CCTR_POSTED'.
+  fname_tab-bapi7_name = 'CCTR_POSTED'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'WAERS'.
+  fname_tab-orext_name = 'WAERS'.
+  fname_tab-bapi2_name = 'CURRENCY'.
+  fname_tab-bapi7_name = 'CURRENCY'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'KALSM'.
+  fname_tab-orext_name = 'KALSM'.
+  fname_tab-bapi2_name = 'CSTG_SHEET'.
+  fname_tab-bapi7_name = 'CSTG_SHEET'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'ZSCHL'.
+  fname_tab-orext_name = 'ZSCHL'.
+  fname_tab-bapi2_name = 'OVERHEAD_KEY'.
+  fname_tab-bapi7_name = 'OVERHEAD_KEY'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'ABGSL'.
+  fname_tab-orext_name = 'ABGSL'.
+  fname_tab-bapi2_name = 'RES_ANAL_KEY'.
+  fname_tab-bapi7_name = 'RES_ANAL_KEY'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'ZSCHM'.
+  fname_tab-orext_name = 'ZSCHM'.
+  fname_tab-bapi2_name = 'INTEREST_PROF'.
+  fname_tab-bapi7_name = 'INTEREST_PROF'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER0'.
+  fname_tab-orext_name = 'USER0'.
+  fname_tab-bapi2_name = 'APPLICANT'.
+  fname_tab-bapi7_name = 'APPLICANT'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER1'.
+  fname_tab-orext_name = 'USER1'.
+  fname_tab-bapi2_name = 'APPLICANT_PHONE'.
+  fname_tab-bapi7_name = 'APPLICANT_PHONE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER2'.
+  fname_tab-orext_name = 'USER2'.
+  fname_tab-bapi2_name = 'PERSON_RESP'.
+  fname_tab-bapi7_name = 'PERSON_RESP'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER3'.
+  fname_tab-orext_name = 'USER3'.
+  fname_tab-bapi2_name = 'PERSON_RESP_PHONE'.
+  fname_tab-bapi7_name = 'PERSON_RESP_PHONE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER4'.
+  fname_tab-orext_name = 'USER4'.
+  fname_tab-bapi2_name = 'ESTIMATED_COSTS'.
+  fname_tab-bapi7_name = 'ESTIMATED_COSTS'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER5'.
+  fname_tab-orext_name = 'USER5'.
+  fname_tab-bapi2_name = 'APPLICATION_DATE'.
+  fname_tab-bapi7_name = 'APPLICATION_DATE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER6'.
+  fname_tab-orext_name = 'USER6'.
+  fname_tab-bapi2_name = 'DEPARTMENT'.
+  fname_tab-bapi7_name = 'DEPARTMENT'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name = 'USER7'.
+  fname_tab-orext_name = 'USER7'.
+  fname_tab-bapi2_name = 'DATE_WORK_BEGINS'.
+  fname_tab-bapi7_name = 'DATE_WORK_BEGINS'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER8'.
+  fname_tab-orext_name = 'USER8'.
+  fname_tab-bapi2_name = 'DATE_WORK_ENDS'.
+  fname_tab-bapi7_name = 'DATE_WORK_ENDS'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'USER9'.
+  fname_tab-orext_name = 'USER9'.
+  fname_tab-bapi2_name = 'WORK_PERMIT'.
+  fname_tab-bapi7_name = 'WORK_PERMIT'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'AUFEX'.
+  fname_tab-orext_name = 'AUFEX'.
+  fname_tab-bapi2_name = 'EXT_ORD_NO'.
+  fname_tab-bapi7_name = 'EXT_ORD_NO'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'ABKRS'.
+  fname_tab-orext_name = 'ABKRS'.
+  fname_tab-bapi2_name = 'PROCESSING_GROUP'.
+  fname_tab-bapi7_name = 'PROCESSING_GROUP'.
+  APPEND fname_tab.
+
+*  FNAME_TAB-COAS_NAME  = 'IVPRO'.
+*  FNAME_TAB-OREXT_NAME = 'IVPRO'.
+*  FNAME_TAB-BAPI2_NAME = 'INVEST_PROFILE'.
+*  FNAME_TAB-BAPI7_NAME = 'INVEST_PROFILE'.
+*  APPEND FNAME_TAB.
+
+*  FNAME_TAB-COAS_NAME  = 'SIZECL'.
+*  FNAME_TAB-OREXT_NAME = 'SIZECL'.
+*  FNAME_TAB-BAPI2_NAME = 'SCALE'.
+*  FNAME_TAB-BAPI7_NAME = 'SCALE'.
+*  APPEND FNAME_TAB.
+
+*  FNAME_TAB-COAS_NAME  = 'IZWEK'.
+*  FNAME_TAB-OREXT_NAME = 'IZWEK'.
+*  FNAME_TAB-BAPI2_NAME = 'INV_REASON'.
+*  FNAME_TAB-BAPI7_NAME = 'INV_REASON'.
+*  APPEND FNAME_TAB.
+
+*  FNAME_TAB-COAS_NAME  = 'UMWKZ'.
+*  FNAME_TAB-OREXT_NAME = 'UMWKZ'.
+*  FNAME_TAB-BAPI2_NAME = 'ENVIR_INVEST'.
+*  FNAME_TAB-BAPI7_NAME = 'ENVIR_INVEST'.
+*  APPEND FNAME_TAB.
+
+  fname_tab-coas_name  = 'PDAT1'.
+  fname_tab-orext_name = 'PDAT1'.
+  fname_tab-bapi2_name = 'PLN_RELEASE'.
+  fname_tab-bapi7_name = 'PLN_RELEASE'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'PDAT2'.
+  fname_tab-orext_name = 'PDAT2'.
+  fname_tab-bapi2_name = 'PLN_COMPLETION'.
+  fname_tab-bapi7_name = 'PLN_COMPLETION'.
+  APPEND fname_tab.
+
+  fname_tab-coas_name  = 'PDAT3'.
+  fname_tab-orext_name = 'PDAT3'.
+  fname_tab-bapi2_name = 'PLN_CLOSE'.
+  fname_tab-bapi7_name = 'PLN_CLOSE'.
+  APPEND fname_tab.
+
+*  4.7 enhancement
+*  fname_tab-coas_name  = 'FUNC_AREA'.                       "note372928
+*  fname_tab-orext_name = 'FUNC_AREA'.                       "note372928
+*  fname_tab-bapi2_name =  space.                            "note372928
+*  fname_tab-bapi7_name = 'FUNC_AREA'.                       "note372928
+*  append fname_tab.
+
+  fname_tab-coas_name  = 'ANFAUFNR'.
+  fname_tab-orext_name = 'ANFAUFNR'.
+  fname_tab-bapi2_name = 'REQUEST_ORDER'.
+  fname_tab-bapi7_name = 'REQUEST_ORDER'.
+  APPEND fname_tab.
+
+* data element FKBER_SHORT(4): only in BAPI structures
+  fname_tab-coas_name  = space.
+  fname_tab-orext_name = space.
+  fname_tab-bapi2_name = 'FUNC_AREA'.
+  fname_tab-bapi7_name = 'FUNC_AREA'.
+  APPEND fname_tab.
+
+* data element FKBER(16): new in BAPI, default func area in master data
+  fname_tab-coas_name  = 'FUNC_AREA'.
+  fname_tab-orext_name = 'FUNC_AREA'.
+  fname_tab-bapi2_name = 'FUNC_AREA_LONG'.
+  fname_tab-bapi7_name = 'FUNC_AREA_LONG'.
+  APPEND fname_tab.
+
+ENDFORM.                               " FILL_FNAME_TAB
+
+*&---------------------------------------------------------------------*
+*&      Form  APPEND_RETURN_AND_RESET
+*&---------------------------------------------------------------------*
+*       fills RETURN and stops processing
+*----------------------------------------------------------------------*
+FORM append_return_and_reset TABLES   p_return STRUCTURE bapiret2
+                             USING    p_sy LIKE sy.
+
+  DATA: msg_type LIKE bapiret2-type.
+  DATA: ld_index TYPE obj_index.                            "note353492
+
+  msg_type = p_sy-msgty.
+  CALL FUNCTION 'BALW_BAPIRETURN_GET2'
+    EXPORTING
+      type   = p_sy-msgty
+      cl     = p_sy-msgid
+      number = p_sy-msgno
+      par1   = p_sy-msgv1
+      par2   = p_sy-msgv2
+      par3   = p_sy-msgv3
+      par4   = p_sy-msgv4
+    IMPORTING
+      return = p_return.
+  APPEND p_return.
+*   stop processing on severe errors
+  IF ( 'AEX' CS msg_type ).
+    CALL FUNCTION 'KAUF_INDEX_GET_CURRENT'                  "note353492
+      IMPORTING                                             "note353492
+        e_index           = ld_index                        "note353492
+      EXCEPTIONS                                            "note353492
+        OTHERS            = 1.                              "note353492
+    IF sy-subrc = 0.                                        "note353492
+      CALL FUNCTION 'KAUF_ORDER_RESET'
+           EXPORTING
+*                i_reset_all = 'X'.                        "note353492
+                 i_index     = ld_index.                    "note353492
+    ENDIF.                                                  "note353492
+  ENDIF.
+ENDFORM.                               " APPEND_RETURN_AND_RESET

@@ -1,0 +1,165 @@
+FUNCTION bapi_fagl_planning_post .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(HEADERINFO) LIKE  BAPIBUS1600_PLAN_HEAD STRUCTURE
+*"        BAPIBUS1600_PLAN_HEAD
+*"     VALUE(DELTA) TYPE  BAPIBUS1600_S_PARAM-DELTA DEFAULT SPACE
+*"     VALUE(TESTRUN) TYPE  BAPIBUS1600_S_PARAM-TESTRUN DEFAULT SPACE
+*"  TABLES
+*"      FIELDLIST STRUCTURE  BAPIBUS1600_S_FIELDLIST OPTIONAL
+*"      PERVALUE STRUCTURE  BAPIBUS1600_S_POS_PERIOD OPTIONAL
+*"      EXTENSIONIN STRUCTURE  BAPIPAREX OPTIONAL
+*"      RETURN STRUCTURE  BAPIRET2
+*"----------------------------------------------------------------------
+* tabname   : name of sum table
+* headerinfo: contains the header information
+* delta     : = ' ' ==> values are the target values; first read
+*                        existing data
+*             = 'X' ==> values are delta values to the yet existing data
+* testrun   : = ' ' ==> real mode ; posting
+*             = 'X' ==> test run ; only checking
+* fiedlist  : which optional fields are used additional to the fix
+*             fields RRCTY RLDNR RVERS RBUKRS KOKRS RYEAR RACCT; this is
+*             needed in the target mode for selecting on database and
+*             interpretation of initial value
+*
+* pervalue  : values come in period structure HSL01 ... HSL12
+* totvalue  : values come in year structure HSLSUM + distribution key
+************************************************************************
+
+*  RPMAX default 16 (planning per months) - inputable
+*  DRCRK credit debit indicator S/H - according sign
+
+*  DOCTY "PO" - plan document                      document type
+*  ACTIV "GLPL" - activity manual planning         transaction type
+*        "GLU1" - Übernahme Fremdsystem ->FI-GLX
+*        "GLFI" - Datenübern. in Flex. Hauptbuch
+*  RRCTY "1"  - planning
+*  LOGSYS - according calling RFC
+
+
+
+  DATA: totaltab_name LIKE t800a-tab,
+        eptab_name LIKE t800a-tab,
+        continue TYPE c VALUE 'X',
+        ls_account_range TYPE fagl_range_racct,
+        r_totaltab TYPE REF TO data,
+        gt_ext_data TYPE glpln_yt_cust_str_pos.
+
+*  DATA: s_totaltab_pos TYPE glpln_y_totaltab_pos,
+*        t_totaltab_pos TYPE glpln_yt_totaltab_pos.
+
+
+
+  FIELD-SYMBOLS: <gt_totaltab> TYPE table.
+*                 <ext_data> TYPE table.
+
+  CLEAR gt_return.
+
+  CALL FUNCTION 'FAGL_CUMULPLANG_CHECK_ACTIVE'
+    IMPORTING
+      e_flg_active = g_balance_sheet.
+
+*********************************************
+* getting summary table from ledger
+* T881 ledger -> tabname
+*********************************************
+  PERFORM get_tabname USING headerinfo-ledger
+                            totaltab_name
+                            eptab_name
+                            continue.
+
+  IF NOT continue = 'X'.
+    return[] = gt_return[].
+    EXIT.
+  ENDIF.
+
+* declaration of total table
+  CREATE DATA r_totaltab TYPE STANDARD TABLE OF (totaltab_name).
+  ASSIGN r_totaltab->* TO <gt_totaltab>.
+
+  PERFORM check_headdata  USING headerinfo
+                                continue.
+  IF NOT continue = 'X'.
+    return[] = gt_return[].
+    EXIT.
+  ENDIF.
+
+* dummy (authority check not defined)
+  PERFORM authorithy_check USING headerinfo
+                           CHANGING continue.
+
+
+* fill customer fields from BAdI
+  PERFORM fill_customer_fields TABLES extensionin
+                                USING headerinfo
+                             CHANGING gt_ext_data
+                                      continue.
+  IF NOT continue = 'X'.
+    return[] = gt_return[].
+    EXIT.
+  ENDIF.
+
+  PERFORM complete_fieldlist TABLES fieldlist.
+
+* checking and merging fix and cust. fields to
+* totals table
+  PERFORM check_and_map_pervalues
+                         TABLES pervalue
+                                fieldlist
+                                <gt_totaltab>
+                                gt_ext_data
+                          USING totaltab_name
+                                headerinfo
+                                ls_account_range
+                                continue.
+
+  IF NOT continue = 'X'.
+    return[] = gt_return[].
+    EXIT.
+  ENDIF.
+
+  IF delta IS INITIAL.
+
+    IF g_balance_sheet IS INITIAL.
+      PERFORM process_full_period TABLES <gt_totaltab>
+                                         fieldlist
+                                  USING  totaltab_name
+                                         headerinfo
+                                         testrun.
+    ELSE.
+      PERFORM process_full_period_2 TABLES <gt_totaltab>
+                                           fieldlist
+                                    USING  totaltab_name
+                                           headerinfo
+                                           ls_account_range
+                                           testrun.
+    ENDIF.
+
+*    PERFORM process_full_sum TABLES totvalue
+*                                    return
+*                                    fieldlist
+*                              USING tabname
+*                                    headerinfo
+*                                    testrun.
+*
+  ELSE.
+* no fieldlist needed
+    PERFORM process_delta_period TABLES <gt_totaltab>
+                                  USING totaltab_name
+                                        headerinfo
+                                        testrun.
+
+*    PERFORM process_delta_sum TABLES totvalue
+*                                     return
+*                               USING tabname
+*                                     fieldlist
+*                                     headerinfo
+*                                     testrun.
+  ENDIF.
+
+
+  return[] = gt_return[].
+
+ENDFUNCTION.

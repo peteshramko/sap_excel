@@ -1,0 +1,435 @@
+FUNCTION bapi_bus2001_set_status .
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"  IMPORTING
+*"     VALUE(PROJECT_DEFINITION) LIKE  BAPIPR-PROJECT_DEFINITION
+*"     VALUE(UNDO_SYSTEM_STATUS) LIKE  BAPI_SYSTEM_STATUS-SYSTEM_STATUS
+*"       OPTIONAL
+*"     VALUE(UNDO_USER_STATUS) LIKE  BAPI_USER_STATUS-USER_STATUS
+*"       OPTIONAL
+*"     VALUE(SET_SYSTEM_STATUS) LIKE  BAPI_SYSTEM_STATUS-SYSTEM_STATUS
+*"       OPTIONAL
+*"     VALUE(SET_USER_STATUS) LIKE  BAPI_USER_STATUS-USER_STATUS
+*"       OPTIONAL
+*"  EXPORTING
+*"     VALUE(RETURN) TYPE  BAPIRETURN1
+*"  TABLES
+*"      E_RESULT STRUCTURE  BAPI_STATUS_RESULT OPTIONAL
+*"----------------------------------------------------------------------
+
+  DATA: l_check_ok  TYPE boole_d,
+        l_par1      LIKE sy-msgv1,
+        l_par2      LIKE sy-msgv1.
+  DATA: LOG_LEVEL    LIKE METHOD_LOG-LOGLEVEL,
+        SUCC_CODE    LIKE METHOD_LOG-SUCC_CODE.
+  DATA: l_proj      like proj,
+        l_objectkey type BAPI_STATUS_RESULT-objectkey.
+  data: l_SET_system_STATUS_orig like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_undo_system_STATUS_orig like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_set_user_STATUS_orig like BAPI_user_STATUS-user_STATUS,
+        l_undo_user_STATUS_orig like BAPI_user_STATUS-user_STATUS,
+        l_SET_system_STATUS_disc like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_undo_system_STATUS_disc like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_SET_user_STATUS_disc like BAPI_SYSTEM_STATUS-SYSTEM_STATUS,
+        l_undo_user_STATUS_disc like BAPI_SYSTEM_STATUS-SYSTEM_STATUS.
+
+  data: lv_prj_stat_chg type flag.                        "Note_979840
+
+  data: lv_dialog_status type flag.                      " Note 928161
+
+* ^_NOTE_928161
+* Get the dialog status before the BAPI call.
+  CALL FUNCTION 'DIALOG_GET_STATUS'
+    IMPORTING
+      DIALOG_STATUS       = lv_dialog_status.
+* v_NOTE_928161
+
+* save structure
+  l_SET_system_STATUS_orig = set_system_status.
+  l_undo_system_STATUS_orig = undo_system_status.
+  l_SET_user_STATUS_orig = set_user_status.
+  l_undo_user_STATUS_orig = undo_user_status.
+
+* initialization
+  perform cnif_init using    space
+                    changing l_check_ok.
+  IF l_check_ok = false.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '005'
+      IMPORTING
+        bapireturn = return.
+    write project_definition to l_objectkey.
+    perFORM cnif_read_log TABLES
+                           e_result
+                           using
+                           l_objectkey
+                           space
+                           space.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+*   All-or-nothing principle: call chk_precommit in all cases
+    CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_928161
+*   Reset dialog flags
+    PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_928161
+    EXIT.
+  ENDIF.
+
+* read and lock project
+  write project_definition to l_objectkey.
+  perform cnif_read_lock_project using 'P'
+                                        project_definition
+                                 changing
+                                        l_proj
+                                        l_check_ok.
+  IF l_check_ok = false.
+    l_par1 = project_definition.
+    CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+      EXPORTING
+        type       = 'E'
+        cl         = 'CNIF_STATUS'
+        number     = '004'
+        par1       = l_par1
+      IMPORTING
+        bapireturn = return.
+    perFORM cnif_read_log TABLES
+                           e_result
+                           using
+                           l_objectkey
+                           space
+                           space.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+*   All-or-nothing principle: call chk_precommit in all cases
+    CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_928161
+*   Reset dialog flags
+    PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_928161
+    EXIT.
+  ENDIF.
+
+* discard pd (undo)
+  perform cnif_status_2001_discard
+              using
+                 l_proj-objnr
+                 c_U
+              changing
+                 undo_system_status
+                 undo_user_status.
+
+  l_undo_system_STATUS_disc = undo_system_status.
+  l_undo_user_STATUS_disc = undo_user_status.
+
+* check, if input is correct (undo)
+  if not undo_system_status is initial.
+    PERFORM cnif_system_status_2001_check
+                USING undo_system_status
+                      c_U
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = c_check
+          OBJ_TYP    = CO1_TYPE-PROJECT_DEFINITION
+          OBJ_ID_EXT = project_definition
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E001(CNIF_STATUS)
+              WITH UNDO_SYSTEM_STATUS
+                   project_definition
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      write project_definition to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_System
+                             c_U.
+      clear undo_system_status.
+    ENDIF.
+  endif.
+
+  if not undo_user_status is initial.
+    PERFORM cnif_user_status_2001_check
+                USING  l_proj-objnr
+                       undo_user_status
+                CHANGING
+                       l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = c_check
+          OBJ_TYP    = CO1_TYPE-PROJECT_DEFINITION
+          OBJ_ID_EXT = project_definition
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E001(CNIF_STATUS)
+              WITH UNDO_user_STATUS
+                   project_definition
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      write project_definition to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_User
+                             c_U.
+      clear undo_user_status.
+    ENDIF.
+  endif.
+
+* execute (undo)
+  if not undo_system_status is initial.
+    perform cnif_status_2001_set using l_proj
+                                       undo_system_status
+                                       space                            "nt_1259614
+                                       c_U
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      perFORM cnif_read_log TABLES
+                              e_result
+                            using
+                              l_objectkey
+                              c_System
+                              c_U.
+      clear undo_system_status.
+    ELSE.
+      lv_prj_stat_chg = c_X.    "Note_979840
+    ENDIF.
+  endif.
+
+  if not undo_user_status is initial.
+    perform cnif_status_2001_set using l_proj
+                                       space                            "nt_1259614
+                                       undo_user_status
+                                       c_U
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      perFORM cnif_read_log TABLES
+                              e_result
+                            using
+                              l_objectkey
+                              c_User
+                              c_U.
+      clear undo_user_status.
+    ELSE.
+      lv_prj_stat_chg = c_X.    "Note_979840
+    ENDIF.
+  endif.
+
+* discard pd (set)
+  perform cnif_status_2001_discard
+              using
+                 l_proj-objnr
+                 c_S
+              changing
+                 set_system_status
+                 set_user_status.
+
+  l_set_system_STATUS_disc = set_system_status.
+  l_set_user_STATUS_disc = set_user_status.
+
+* check, if input is correct (set)
+  if not set_system_status is initial.
+    PERFORM cnif_system_status_2001_check
+                USING set_system_status
+                      c_S
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = c_check
+          OBJ_TYP    = CO1_TYPE-PROJECT_DEFINITION
+          OBJ_ID_EXT = project_definition
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E000(CNIF_STATUS)
+              WITH SET_SYSTEM_STATUS
+                   project_definition
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      write project_definition to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_System
+                             c_S.
+      clear set_system_status.
+    endif.
+  endif.
+
+  if not set_user_status is initial.
+    PERFORM cnif_user_status_2001_check
+                USING  l_proj-objnr
+                       set_user_status
+                CHANGING
+                      l_check_ok.
+    IF l_check_ok = false.
+      CALL FUNCTION 'METHOD_START_LOG'
+        EXPORTING
+          METHOD     = c_check
+          OBJ_TYP    = CO1_TYPE-PROJECT_DEFINITION
+          OBJ_ID_EXT = project_definition
+        IMPORTING
+          LOG_LEVEL  = LOG_LEVEL.
+      message E000(CNIF_STATUS)
+              WITH set_user_STATUS
+                   project_definition
+                   INTO NULL.
+      perform cnif_put_sy_message.
+      CALL FUNCTION 'METHOD_FINISH_LOG'
+        EXPORTING
+          LOG_LEVEL = LOG_LEVEL
+          SUCC_CODE = SUCC_CODE.
+      write project_definition to l_objectkey.
+      perFORM cnif_read_log TABLES
+                             e_result
+                            using
+                             l_objectkey
+                             c_User
+                             c_S.
+      clear set_user_status.
+    ENDIF.
+  endif.
+
+* execute (set)
+  if not set_system_status is initial.
+    perform cnif_status_2001_set using l_proj
+                                       set_system_status
+                                       space                            "nt_1259614
+                                       c_S
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      perFORM cnif_read_log TABLES
+                              e_result
+                            using
+                              l_objectkey
+                              c_System
+                              c_S.
+      clear set_system_status.
+    ELSE.
+      lv_prj_stat_chg = c_X.    "Note_979840
+    ENDIF.
+  endif.
+
+  if not set_user_status is initial.
+    perform cnif_status_2001_set using l_proj
+                                       space                            "nt_1259614
+                                       set_user_status
+                                       c_S
+                                 changing
+                                        l_check_ok.
+    IF l_check_ok = false.
+      perFORM cnif_read_log TABLES
+                              e_result
+                            using
+                              l_objectkey
+                              c_User
+                              c_S.
+      clear set_user_status.
+    ELSE.
+      lv_prj_stat_chg = c_X.    "Note_979840
+    ENDIF.
+  endif.
+
+  IF NOT lv_prj_stat_chg IS INITIAL.    "Note_979840
+    PERFORM PROJ_UPDKZ_SET(SAPLCJDW).   "Note_979840
+  ENDIF.                                "Note_979840
+
+* determine return
+  if l_set_system_status_orig  = l_set_system_status_disc and
+     l_undo_system_status_orig = l_undo_system_status_disc and
+     l_set_user_status_orig    = l_set_user_status_disc and
+     l_undo_user_status_orig   = l_undo_user_status_disc.
+    if set_system_status          is initial and
+       undo_system_status         is initial and
+       set_user_status            is initial and
+       undo_user_status           is initial.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+        EXPORTING
+          type       = 'E'
+          cl         = 'CNIF_STATUS'
+          number     = '005'
+        IMPORTING
+          bapireturn = return.
+      CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+           EXPORTING
+                i_error = con_yes.
+*     All-or-nothing principle: call chk_precommit in all cases
+      CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_928161
+*     Reset dialog flags
+      PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_928161
+      exit.
+    elseif set_system_status          ne l_set_system_status_orig  or
+           undo_system_status         ne l_undo_system_status_orig or
+           set_user_status            ne l_set_user_status_orig    or
+           undo_user_status           ne l_undo_user_status_orig.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+        EXPORTING
+          type       = 'E'
+          cl         = 'CNIF_STATUS'
+          number     = '006'
+        IMPORTING
+          bapireturn = return.
+    endif.
+  else.
+    if set_system_status          ne l_set_system_status_disc  or
+       undo_system_status         ne l_undo_system_status_disc or
+       set_user_status            ne l_set_user_status_disc    or
+       undo_user_status           ne l_undo_user_status_disc.
+      CALL FUNCTION 'BALW_BAPIRETURN_GET1'
+        EXPORTING
+          type       = 'E'
+          cl         = 'CNIF_STATUS'
+          number     = '006'
+        IMPORTING
+          bapireturn = return.
+    endif.
+  endif.
+
+  if return is initial.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_wbs_data = con_yes.
+  else.
+    CALL FUNCTION 'PS_FLAG_SET_GLOBAL_FLAGS'
+         EXPORTING
+              i_error = con_yes.
+  endif.
+* All-or-nothing principle: call chk_precommit in all cases
+  CALL FUNCTION 'PS_BAPI_CHK_PRECOMMIT'.
+* ^_NOTE_928161
+* Reset dialog flags
+  PERFORM bapi_dialog_end(saplps_bapi) USING lv_dialog_status.
+* v_NOTE_928161
+
+ENDFUNCTION.
