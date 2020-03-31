@@ -26,7 +26,7 @@ The *basic* architecture:
  
  
  
- Note 1: It is possible to hard code C# to COM using IUNKNOWN interface. This is, sadly, not optimal. 
+ Note 1: It is possible to hard code C# to COM using IDISPATCH (late binding through "dynamic") interface. This is, sadly, not optimal. 
          Behavior is erratic at best.
          The compromise of using a VB.NET RTD COM wrapper (capable of late-binding by default) comes after much testing 
          and research. It works quite well. The handoff of data to C# dll as RTD kicks in is smooth. The readback uses
